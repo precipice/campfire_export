@@ -3,6 +3,7 @@ require 'time'
 require 'fileutils'
 require 'httparty'
 require 'nokogiri'
+require 'pp'
 
 APIToken  = 'your-api-token-goes-here'
 APIServer = 'http://sample.campfirenow.com'
@@ -66,26 +67,42 @@ doc.css('room').each do |room_xml|
   id = room_xml.css('id').text
   
   FileUtils.mkdir_p("campfire/#{id}")
-  
-  date = Date.civil 2010, 8, 31
+
+  date = Date.civil 2011, 1, 19
   # date = Date.civil 2011, 1, 1
-  
+
   while date < Date.today
     puts "#{date.year} #{date.mon} #{date.mday}"
     transcript = Nokogiri::XML get("/room/#{id}/transcript/#{date.year}/#{date.mon}/#{date.mday}.xml").body
-    
+  
     output = "#{room_xml.css('name').text} Transcript\n"
-    
+  
     transcript.css('message').each do |message|
       next if message.css('type').text == 'TimestampMessage'
-      
-      output << message_to_string(message) << "\n"
-    end
     
+      output << message_to_string(message) << "\n"
+
+      if message.css('type').text == "UploadMessage"
+        # We get the HTML page because the XML doesn't contain the URL for the uploaded file :(
+        html_transcript = Nokogiri::XML get("/room/#{id}/transcript/#{date.year}/#{date.mon}/#{date.mday}")
+        file_name = "#{message.css('body').text}"
+        # I am sure there's a better way than cycling through all the hyperlinks
+        html_transcript.css('a').each do |link|
+          if link.text == file_name
+            open("campfire/#{id}/#{link.text}", "wb") { |file|
+              file.write(get(link.attr("href")))
+             }
+             # We break because there are two links with the same file on the HTML page
+             break
+          end
+        end
+      end
+    end
+  
     open("campfire/#{id}/#{file_name date}", 'w') do |f|
       f.puts output
     end
-    
+  
     date = date.next
   end
 end
