@@ -1,0 +1,29 @@
+--- 
+dependencies: 
+  fileutils: 
+    group: 
+    - :default
+    version: ">= 0"
+  httparty: 
+    group: 
+    - :default
+    version: ">= 0"
+  nokogiri: 
+    group: 
+    - :default
+    version: ">= 0"
+specs: 
+- crack: 
+    version: 0.1.8
+- rmagick: 
+    version: 2.13.1
+- fileutils: 
+    version: "0.6"
+- httparty: 
+    version: 0.7.3
+- nokogiri: 
+    version: 1.4.4
+hash: ba3ddaf1ab1378d9ecc8c9e6d530ef4cb7e6c4e9
+sources: 
+- Rubygems: 
+    uri: http://gemcutter.org

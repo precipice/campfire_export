@@ -5,8 +5,10 @@ require 'httparty'
 require 'nokogiri'
 require 'pp'
 
-APIToken  = 'your-api-token-goes-here'
-APIServer = 'http://sample.campfirenow.com'
+# 1) set the start date on line 77
+APIToken  = '' # 2) your-api-token-goes-here, see your campfire profile
+subdomain = '' # 3) your subdomain goes here
+APIServer = 'https://#{subdomain}.campfirenow.com'
 
 def get(path, params = {})
   HTTParty.get "#{APIServer}#{path}",
@@ -45,8 +47,12 @@ def message_to_string(message)
     "#{prefix} #{user} changed the topic to '#{body}'"
   when 'ConferenceCreatedMessage'
     "#{prefix} #{user} created conference #{body}"
+  when 'TweetMessage'
+    "#{prefix} #{user} tweeted #{body}"
+  when 'AdvertisementMessage'
+    "#{prefix} Advertisement #{body}" #Do we want to print this?
   else
-    raise "Unknown Message Type: #{type} - '#{body}'"
+    "****Unknown Message Type: #{type} - '#{body}'" # don't want to raise and crash it
   end
 end
 
@@ -68,7 +74,7 @@ doc.css('room').each do |room_xml|
   
   FileUtils.mkdir_p("campfire/#{id}")
 
-  date = Date.civil 2011, 1, 19
+  date = Date.civil 2010, 1, 26
   # date = Date.civil 2011, 1, 1
 
   while date < Date.today
