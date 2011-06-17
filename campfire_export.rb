@@ -76,11 +76,7 @@ def message_to_string(message)
 end
 
 def zero_pad(number)
-  if number < 10
-    "0" + number.to_s
-  else
-    number.to_s
-  end
+  "%02d" % number
 end
 
 def directory(room, date)
