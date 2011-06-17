@@ -70,6 +70,10 @@ Gist I forked had contributions from:
 * [Bruno Mattarollo](https://github.com/bruno)
 * [bf4](https://github.com/bf4)
 
+Also, thanks for comments and contributions:
+
+* [Brad Greenlee](https://github.com/bgreenlee)
+
 Thanks, all!
 
 - Marc Hedlund, marc@precipice.org
