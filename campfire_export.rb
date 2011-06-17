@@ -159,10 +159,10 @@ doc.css('room').each do |room_xml|
       messages.each do |message|
         if message.css('type').text == "UploadMessage"
           export_upload(message, export_dir)
-        else
-          message_text = message_to_string(message)
-          plaintext << message_text << "\n" if message_text.length > 0
         end
+
+        message_text = message_to_string(message)
+        plaintext << message_text << "\n" if message_text.length > 0
       end
       
       # FIXME: These should all be command-line options.
