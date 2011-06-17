@@ -93,7 +93,8 @@ doc.css('room').each do |room_xml|
     print "#{room}: #{date.year}/#{date.mon}/#{date.mday}..."
     transcript = Nokogiri::XML get("/room/#{id}/transcript/#{date.year}/#{date.mon}/#{date.mday}.xml").body  
     messages = transcript.css('message')
-
+    
+    # Only parse and save transcripts that contain at least one message.
     if messages.length > 0
       puts "found transcript"
       
@@ -122,10 +123,12 @@ doc.css('room').each do |room_xml|
         end
       end
       
+      # Save the original XML transcript.
       open("#{directory(room, date)}/transcript.xml", 'w') do |f|
         f.puts transcript
       end
-
+      
+      # Save the plaintext transcript.
       open("#{directory(room, date)}/transcript.txt", 'w') do |f|
         f.puts output
       end
@@ -135,6 +138,7 @@ doc.css('room').each do |room_xml|
       
     date = date.next
     
+    # Ensure that we stay well below the 37signals API limits.
     sleep(1.0/10.0)
   end
 end
