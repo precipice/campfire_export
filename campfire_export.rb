@@ -58,6 +58,8 @@ def export_upload(message, directory)
   # Get the upload object corresponding to this message.
   room_id = message.css('room-id').text
   message_id = message.css('id').text
+  message_body = message.css('body').text
+  print "#{directory}/#{message_body} ... "
   upload_path = "/room/#{room_id}/messages/#{message_id}/upload.xml"
   upload = Nokogiri::XML get(upload_path).body
 
@@ -67,10 +69,15 @@ def export_upload(message, directory)
   content_path = "/room/#{room_id}/uploads/#{upload_id}/#{CGI.escape(filename)}"
   content = get(content_path)
 
-  if content.length > 0
+  if content.code < 400
+    puts "exporting"
     export(content, directory, filename, 'wb')
+  elsif content.code == 404
+    puts "deleted"
   else
-    log_error("download of #{directory}/#{filename} failed.")
+    puts
+    http_error = "#{content.code} #{content.message}"
+    log_error("export of #{directory}/#{message_body} failed (#{http_error})")
   end
 end
 
@@ -144,7 +151,7 @@ doc.css('room').each do |room_xml|
     
     # Only export transcripts that contain at least one message.
     if messages.length > 0
-      puts "exporting"
+      puts "exporting transcripts"
       FileUtils.mkdir_p export_dir
       transcript_html = get(transcript_path)
       plaintext = "#{room_xml.css('name').text} Transcript\n"
