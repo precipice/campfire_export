@@ -7,29 +7,33 @@ require 'nokogiri'
 require 'time'
 
 ###
-#
 # Script configuration - all options are required.
 
-start_date = Date.civil(2010, 1, 1)   # 1) Set the export start date
-end_date   = Date.civil(2010, 12, 31) # 2) Set the export end date, inclusive
-api_token  = ''                       # 3) Your API token goes here 
-                                      #    (see "My Info" in Campfire)
-subdomain  = ''                       # 4) Your Campfire subdomain goes here
-                                      #    (e.g., 'mycompany')
-#
-#
+# Export start date - the first transcript you want exported.
+START_DATE = Date.civil(2010, 1, 1)
+
+# Export end date - the last transcript you want exported, inclusive.
+END_DATE   = Date.civil(2010, 12, 31)
+
+# Your Campfire API token (see "My Info" on your Campfire site).
+API_TOKEN  = ''
+
+# Your Campfire subdomain (for 'https://myco.campfirenow.com', enter 'myco').
+SUBDOMAIN  = ''
+
+# End of configuration
 ###
 
-base_url = "https://#{subdomain}.campfirenow.com"
+BASE_URL = "https://#{SUBDOMAIN}.campfirenow.com"
 
 def log_error(message)
   $stderr.puts "*** Error: #{message}"
 end
 
 def get(path, params = {})
-  HTTParty.get "#{base_url}#{path}",
+  HTTParty.get "#{BASE_URL}#{path}",
     :query      => params,
-    :basic_auth => {:username => api_token, :password => 'X'}
+    :basic_auth => {:username => API_TOKEN, :password => 'X'}
 end
 
 def username(id)
@@ -55,7 +59,7 @@ def export_upload(message, directory)
   room_id = message.css('room-id').text
   message_id = message.css('id').text
   upload_path = "/room/#{room_id}/messages/#{message_id}/upload.xml"
-  upload = Nokogiri::XML get(upload_path)
+  upload = Nokogiri::XML get(upload_path).body
 
   # Get the upload itself and export it.
   upload_id = upload.css('id').text
@@ -71,7 +75,7 @@ def export_upload(message, directory)
 end
 
 def indent(string, count)
-  (' ' * count) + gsub(/(\n+)/) { $1 + (' ' * count) }
+  (' ' * count) + string.gsub(/(\n+)/) { $1 + (' ' * count) }
 end
 
 def message_to_string(message)
@@ -122,16 +126,16 @@ def zero_pad(number)
 end
 
 def directory_for(room, date)
-  "campfire/#{subdomain}/#{room}/#{date.year}/#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
+  "campfire/#{SUBDOMAIN}/#{room}/#{date.year}/#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
 end
 
 doc = Nokogiri::XML get('/rooms.xml').body
 doc.css('room').each do |room_xml|
   room = room_xml.css('name').text
   id   = room_xml.css('id').text  
-  date = start_date
+  date = START_DATE
 
-  while date <= end_date
+  while date <= END_DATE
     export_dir = directory_for(room, date)
     print "#{export_dir} ... "
     transcript_path = "/room/#{id}/transcript/#{date.year}/#{date.mon}/#{date.mday}"
@@ -141,13 +145,13 @@ doc.css('room').each do |room_xml|
     # Only export transcripts that contain at least one message.
     if messages.length > 0
       puts "exporting"
-      FileUtils.mkdir_p output_directory
+      FileUtils.mkdir_p export_dir
       transcript_html = get(transcript_path)
       plaintext = "#{room_xml.css('name').text} Transcript\n"
     
       messages.each do |message|
         if message.css('type').text == "UploadMessage"
-          export_upload(message, output_directory)
+          export_upload(message, export_dir)
         else
           message_text = message_to_string(message)
           plaintext << message_text << "\n" if message_text.length > 0
