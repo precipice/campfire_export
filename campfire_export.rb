@@ -47,6 +47,10 @@ def message_to_string(message)
     "#{prefix} #{user} changed the topic to '#{body}'"
   when 'ConferenceCreatedMessage'
     "#{prefix} #{user} created conference #{body}"
+  when 'IdleMessage'
+    "#{prefix} #{user} went idle"
+  when 'UnidleMessage'
+    "#{prefix} #{user} became active"
   when 'TweetMessage'
     "#{prefix} #{user} tweeted #{body}"
   when 'AdvertisementMessage'
