@@ -101,24 +101,32 @@ def message_to_string(message)
   when 'TextMessage'
     "#{timestamp} #{user}: #{body}"
   when 'UploadMessage'
-    "#{timestamp} #{user} uploaded '#{body}'"
+    "#{timestamp} #{user} uploaded: #{body}"
   when 'PasteMessage'
     "#{timestamp} #{user} pasted:\n#{indent(body, 4)}"
   when 'TopicChangeMessage'
-    "#{timestamp} #{user} changed the topic to '#{body}'"
+    "#{timestamp} #{user} changed the topic to: #{body}"
   when 'ConferenceCreatedMessage'
-    "#{timestamp} #{user} created conference #{body}"
+    "#{timestamp} #{user} created conference: #{body}"
   when 'AllowGuestsMessage'
     "#{timestamp} #{user} opened the room to guests"
   when 'DisallowGuestsMessage'
     "#{timestamp} #{user} closed the room to guests"
+  when 'LockMessage'
+    "#{timestamp} #{user} locked the room"
+  when 'UnlockMessage'
+    "#{timestamp} #{user} unlocked the room"
   when 'IdleMessage'
-    "#{timestamp} #{user} went idle"
+    "#{timestamp} #{user} became idle"
   when 'UnidleMessage'
     "#{timestamp} #{user} became active"
   when 'TweetMessage'
-    "#{timestamp} #{user} tweeted #{body}"
+    "#{timestamp} #{user} tweeted: #{body}"
+  when 'SoundMessage'
+    "#{timestamp} #{user} played a sound: #{body}"
   when 'TimestampMessage'
+    ""
+  when 'SystemMessage'
     ""
   when 'AdvertisementMessage'
     ""
