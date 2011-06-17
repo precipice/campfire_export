@@ -58,6 +58,10 @@ def message_to_string(message)
     "#{prefix} #{user} changed the topic to '#{body}'"
   when 'ConferenceCreatedMessage'
     "#{prefix} #{user} created conference #{body}"
+  when 'AllowGuestsMessage'
+    "#{prefix} #{user} opened the room to guests"
+  when 'DisallowGuestsMessage'
+    "#{prefix} #{user} closed the room to guests"
   when 'IdleMessage'
     "#{prefix} #{user} went idle"
   when 'UnidleMessage'
@@ -65,9 +69,9 @@ def message_to_string(message)
   when 'TweetMessage'
     "#{prefix} #{user} tweeted #{body}"
   when 'AdvertisementMessage'
-    "#{prefix} Advertisement #{body}" #Do we want to print this?
+    ""
   else
-    "****Unknown Message Type: #{type} - '#{body}'" # don't want to raise and crash it
+    "****Unknown Message Type: #{type} - '#{body}'"
   end
 end
 
