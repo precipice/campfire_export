@@ -39,43 +39,50 @@ def username(id)
   end
 end
 
+def indent(string, count)
+  (' ' * count) + gsub(/(\n+)/) { $1 + (' ' * count) }
+end
+
 def message_to_string(message)
   user = username message.css('user-id').text
   type = message.css('type').text
   
   body = message.css('body').text
   time = Time.parse message.css('created-at').text
-  prefix = time.strftime '[%H:%M:%S]'
+  timestamp = time.strftime '[%H:%M:%S]'
   
   case type
   when 'EnterMessage'
-    "#{prefix} #{user} has entered the room"
+    "#{timestamp} #{user} has entered the room"
   when 'KickMessage', 'LeaveMessage'
-    "#{prefix} #{user} has left the room"
+    "#{timestamp} #{user} has left the room"
   when 'TextMessage'
-    "#{prefix} #{user}: #{body}"
+    "#{timestamp} #{user}: #{body}"
   when 'UploadMessage'
-    "#{prefix} #{user} uploaded '#{body}'"
+    "#{timestamp} #{user} uploaded '#{body}'"
   when 'PasteMessage'
-    "#{prefix} #{user} pasted:\n#{body}"
+    "#{timestamp} #{user} pasted:\n#{indent(body, 4)}"
   when 'TopicChangeMessage'
-    "#{prefix} #{user} changed the topic to '#{body}'"
+    "#{timestamp} #{user} changed the topic to '#{body}'"
   when 'ConferenceCreatedMessage'
-    "#{prefix} #{user} created conference #{body}"
+    "#{timestamp} #{user} created conference #{body}"
   when 'AllowGuestsMessage'
-    "#{prefix} #{user} opened the room to guests"
+    "#{timestamp} #{user} opened the room to guests"
   when 'DisallowGuestsMessage'
-    "#{prefix} #{user} closed the room to guests"
+    "#{timestamp} #{user} closed the room to guests"
   when 'IdleMessage'
-    "#{prefix} #{user} went idle"
+    "#{timestamp} #{user} went idle"
   when 'UnidleMessage'
-    "#{prefix} #{user} became active"
+    "#{timestamp} #{user} became active"
   when 'TweetMessage'
-    "#{prefix} #{user} tweeted #{body}"
+    "#{timestamp} #{user} tweeted #{body}"
+  when 'TimestampMessage'
+    ""
   when 'AdvertisementMessage'
     ""
   else
-    "****Unknown Message Type: #{type} - '#{body}'"
+    log_error("unknown message type: #{type} - '#{body}'")
+    ""
   end
 end
 
