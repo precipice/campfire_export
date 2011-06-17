@@ -21,6 +21,10 @@ subdomain  = ''                       # 4) Your Campfire subdomain goes here
 
 base_url = "https://#{subdomain}.campfirenow.com"
 
+def log_error(message)
+  $stderr.puts "*** Error: #{message}"
+end
+
 def get(path, params = {})
   HTTParty.get "#{base_url}#{path}",
     :query      => params,
