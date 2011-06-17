@@ -5,17 +5,26 @@ require 'httparty'
 require 'nokogiri'
 require 'pp'
 
-start_date = Date.civil(2010, 1, 1)           # 1) set the start date
-end_date   = Date.civil(2010, 12, 31)         # 2) set the end date
-APIToken   = '' # 3) your API token goes here (see "My Info" in Campfire)
-subdomain  = ''                               # 4) your subdomain goes here
+###
+#
+# Script configuration - all options are required.
 
-APIServer = "https://#{subdomain}.campfirenow.com"
+start_date = Date.civil(2010, 1, 1)   # 1) Set the export start date
+end_date   = Date.civil(2010, 12, 31) # 2) Set the export end date, inclusive
+api_token  = ''                       # 3) Your API token goes here 
+                                      #    (see "My Info" in Campfire)
+subdomain  = ''                       # 4) Your Campfire subdomain goes here
+                                      #    (e.g., 'mycompany')
+#
+#
+###
+
+base_url = "https://#{subdomain}.campfirenow.com"
 
 def get(path, params = {})
-  HTTParty.get "#{APIServer}#{path}",
+  HTTParty.get "#{base_url}#{path}",
     :query      => params,
-    :basic_auth => {:username => APIToken, :password => 'X'}
+    :basic_auth => {:username => api_token, :password => 'X'}
 end
 
 def username(id)
