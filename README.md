@@ -3,7 +3,8 @@
 I had an old, defunct [Campfire](http://campfirenow.com/) account with four 
 years' worth of transcripts in it, some of them hilarious, others just 
 memorable. Unfortunately, Campfire doesn't currently have an export function;
-instead it provides pages of individual transcripts.
+instead it provides pages of individual transcripts. I wanted a script to
+export everything from all four years, using the Campfire API.
 
 I found a [Gist](https://gist.github.com) that looked pretty good:
 
@@ -33,7 +34,7 @@ Then install required gems via Bundler:
 
 There are a number of configuration variables clearly marked at the top of
 `campfire_export.rb`. The script won't run without them. Make sure to edit
-them before running the script, and also make sure not to check in your API
+them before running the script, and also make sure **not** to check in your API
 token on any public source repo.
 
 The `start_date` and `end_date` variables are inclusive (that is, if your
