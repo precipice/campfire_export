@@ -4,7 +4,7 @@ I had an old, defunct [Campfire](http://campfirenow.com/) account with five
 years' worth of transcripts in it, some of them hilarious, others just 
 memorable. Unfortunately, Campfire doesn't currently have an export function;
 instead it provides pages of individual transcripts. I wanted a script to
-export everything from all four years, using the Campfire API.
+export everything from all five years, using the Campfire API.
 
 I found a [Gist](https://gist.github.com) that looked pretty good:
 
@@ -46,7 +46,8 @@ Just run `ruby campfire_export.rb` and your transcripts will be exported into
 a `campfire` directory, with subdirectories for each site/room/year/month/day.
 In those directories, any uploaded files will be saved with their original
 filenames. (Note that rooms and uploaded files may have odd filenames -- for
-instance, spaces in the file/directory names.)
+instance, spaces in the file/directory names.) Errors that happen trying to
+export will be logged to `campfire/export_errors.txt`.
 
 The Gist I forked had a plaintext transcript export, which I preserved as
 `transcript.txt` in each directory. However, the original XML and HTML are now
@@ -57,7 +58,6 @@ structure will be sparse (no messages == no directory).
 
 ## Limitations ##
 
-* HTTP errors are not noticed or dealt with.
 * Room name changes are not noticed.
 * Slow as all hell if you have file uploads (which are on S3).
 
