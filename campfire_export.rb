@@ -26,14 +26,37 @@ SUBDOMAIN  = ''
 
 BASE_URL = "https://#{SUBDOMAIN}.campfirenow.com"
 
+module Campfire
+  class ExportException < StandardError
+    attr_accessor :resource, :message, :code
+    def initialize(resource, message, code)
+      @resource = resource
+      @message = message
+      @code = code
+    end
+
+    def to_s
+      "<#{resource}>: #{code} #{message}"
+    end
+  end
+end
+
 def log_error(message)
-  $stderr.puts "*** Error: #{message}"
+  puts "*** Error: #{message}"
+  open("campfire/export_errors.txt", 'a') do |log|
+    log.write "#{message}"
+  end
 end
 
 def get(path, params = {})
-  HTTParty.get "#{BASE_URL}#{path}",
-    :query      => params,
+  url = "#{BASE_URL}#{path}"
+  response = HTTParty.get url, :query => params,
     :basic_auth => {:username => API_TOKEN, :password => 'X'}
+
+  if response.code >= 400
+    raise Campfire::ExportException.new(url, response.message, response.code)
+  end
+  response
 end
 
 def username(id)
@@ -55,29 +78,37 @@ def export(content, directory, filename, mode='w')
 end
 
 def export_upload(message, directory)
-  # Get the upload object corresponding to this message.
-  room_id = message.css('room-id').text
-  message_id = message.css('id').text
-  message_body = message.css('body').text
-  print "#{directory}/#{message_body} ... "
-  upload_path = "/room/#{room_id}/messages/#{message_id}/upload.xml"
-  upload = Nokogiri::XML get(upload_path).body
+  begin
+    # Get the upload object corresponding to this message.
+    room_id = message.css('room-id').text
+    message_id = message.css('id').text
+    message_body = message.css('body').text
+    print "#{directory}/#{message_body} ... "
+    upload_path = "/room/#{room_id}/messages/#{message_id}/upload.xml"
+    upload = Nokogiri::XML get(upload_path).body
 
-  # Get the upload itself and export it.
-  upload_id = upload.css('id').text
-  filename = upload.css('name').text
-  content_path = "/room/#{room_id}/uploads/#{upload_id}/#{CGI.escape(filename)}"
-  content = get(content_path)
-
-  if content.code < 400
+    # Get the upload itself and export it.
+    upload_id = upload.css('id').text
+    filename = upload.css('name').text
+    content_path = "/room/#{room_id}/uploads/#{upload_id}/#{CGI.escape(filename)}"
+    content = get(content_path)
     puts "exporting"
     export(content, directory, filename, 'wb')
-  elsif content.code == 404
-    puts "deleted"
-  else
-    puts
-    http_error = "#{content.code} #{content.message}"
-    log_error("export of #{directory}/#{message_body} failed (#{http_error})")
+  rescue Campfire::ExportException => e
+    if e.code == 404
+      # If the upload 404s, that probably means it was subsequently deleted.
+      puts "deleted"
+    else
+      log_error("export of #{directory}/#{message_body} failed: #{e}")
+    end
+  end
+end
+
+def export_uploads(messages, export_dir)
+  messages.each do |message|
+    if message.css('type').text == "UploadMessage"
+      export_upload(message, export_dir)
+    end
   end
 end
 
@@ -86,10 +117,18 @@ def indent(string, count)
 end
 
 def message_to_string(message)
-  user = username message.css('user-id').text
   type = message.css('type').text
+  if type != 'TimestampMessage'
+    begin
+      user = username(message.css('user-id').text)
+    rescue Campfire::ExportException
+      user = "[unknown user]"
+    end
+  end
   
   body = message.css('body').text
+
+  # FIXME: I imagine this needs to account for time zone.
   time = Time.parse message.css('created-at').text
   timestamp = time.strftime '[%H:%M:%S]'
   
@@ -144,45 +183,63 @@ def directory_for(room, date)
   "campfire/#{SUBDOMAIN}/#{room}/#{date.year}/#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
 end
 
-doc = Nokogiri::XML get('/rooms.xml').body
-doc.css('room').each do |room_xml|
-  room = room_xml.css('name').text
-  id   = room_xml.css('id').text  
-  date = START_DATE
+def plaintext_transcript(messages, room, date)
+  plaintext = "#{room} transcript for #{date.year}-#{date.mon}-#{date.mday}\n\n"
+  messages.each do |message|
+    message_text = message_to_string(message)
+    plaintext << message_text << "\n" if message_text.length > 0
+  end
+  plaintext
+end
 
-  while date <= END_DATE
-    export_dir = directory_for(room, date)
-    print "#{export_dir} ... "
+def export_day(room, id, date)
+  export_dir = directory_for(room, date)
+  print "#{export_dir} ... "
+
+  begin
     transcript_path = "/room/#{id}/transcript/#{date.year}/#{date.mon}/#{date.mday}"
     transcript_xml = Nokogiri::XML get("#{transcript_path}.xml").body
     messages = transcript_xml.css('message')
-    
+
     # Only export transcripts that contain at least one message.
     if messages.length > 0
       puts "exporting transcripts"
       FileUtils.mkdir_p export_dir
-      transcript_html = get(transcript_path)
-      plaintext = "#{room_xml.css('name').text} Transcript\n"
-    
-      messages.each do |message|
-        if message.css('type').text == "UploadMessage"
-          export_upload(message, export_dir)
-        end
 
-        message_text = message_to_string(message)
-        plaintext << message_text << "\n" if message_text.length > 0
+      export(transcript_xml, export_dir, 'transcript.xml')
+      plaintext = plaintext_transcript(messages, room, date)
+      export(plaintext, export_dir, 'transcript.txt')
+      export_uploads(messages, export_dir)
+
+      begin
+        transcript_html = get(transcript_path)
+        export(transcript_html, export_dir, 'transcript.html')
+      rescue Campfire::ExportException => e
+        log_error("HTML transcript download for #{export_dir} failed: #{e}")
       end
-      
-      # FIXME: These should all be command-line options.
-      export(transcript_xml,  export_dir, 'transcript.xml')
-      export(transcript_html, export_dir, 'transcript.html')
-      export(plaintext,       export_dir, 'transcript.txt')
     else
-      puts "no messages, skipping"
+      puts "no messages"
     end
-
-    # Ensure that we stay well below the 37signals API limits.
-    sleep(1.0/10.0)
-    date = date.next
+  rescue Campfire::ExportException => e
+    log_error("transcript download for #{export_dir} failed: #{e}")
   end
+end
+
+begin
+  doc = Nokogiri::XML get('/rooms.xml').body
+  doc.css('room').each do |room_xml|
+    room = room_xml.css('name').text
+    id   = room_xml.css('id').text
+    date = START_DATE
+
+    while date <= END_DATE
+      export_day(room, id, date)
+      date = date.next
+
+      # Ensure that we stay well below the 37signals API limits.
+      sleep(1.0/10.0)
+    end
+  end
+rescue Campfire::ExportException => e
+  log_error("room list download failed: #{e}")
 end
