@@ -13,6 +13,13 @@ I found a [Gist](https://gist.github.com) that looked pretty good:
 but it wasn't quite right. So this is my modification, converted to a GitHub
 repo.
 
+## Features ##
+
+* Saves HTML, XML, and plaintext versions of chat transcripts.
+* Exports uploaded files to a day-specific subdirectory for easy access.
+* Reports and logs export errors so you know what you're missing.
+* Works with any number of Campfire sites and rooms.
+
 ## Installing ##
 
 Ruby 1.8.7 or later is required.
