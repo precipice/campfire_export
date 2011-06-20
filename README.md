@@ -18,7 +18,6 @@ repo.
 * Saves HTML, XML, and plaintext versions of chat transcripts.
 * Exports uploaded files to a day-specific subdirectory for easy access.
 * Reports and logs export errors so you know what you're missing.
-* Works with any number of Campfire sites and rooms.
 
 ## Installing ##
 
@@ -66,11 +65,11 @@ structure will be sparse (no messages == no directory).
 ## Limitations ##
 
 * Room name changes are not noticed.
-* Slow as all hell if you have file uploads (which are on S3).
+* Slow as all hell if you have file uploads.
 
 ## Credit ##
 
-As mentioned above, nearly all the work on this was done by other people. The
+As mentioned above, much of the work on this was done by other people. The
 Gist I forked had contributions from:
 
 * [Pat Allan](https://github.com/freelancing-god)
