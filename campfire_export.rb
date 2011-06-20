@@ -2,6 +2,7 @@ require 'rubygems'
 
 require 'cgi'
 require 'fileutils'
+require 'find'
 require 'httparty'
 require 'nokogiri'
 require 'time'
@@ -93,7 +94,13 @@ def export_upload(message, directory)
 
     if filename != message_body
       @filename_mismatches += 1
-      log_error("Filename mismatch for room #{room_id}, message #{message_id}, upload #{upload_id}:\n  Message body: #{message_body}\n  Filename:     #{filename}\n")
+      log_error("Filename mismatch for room #{room_id}, message #{message_id}, upload #{upload_id}:\n  Message body: #{message_body}\n  Filename:     #{filename}")
+      regex = Regexp.new('^(.*?)\-[^\-.]+(\.\w+)$', true)
+      if regex.match(message_body).to_a.slice(1..-1).join('') == filename
+        log_error("Test pattern matches.\n")
+      else
+        log_error("*** Test pattern does NOT match. ***\n")
+      end
     end
 
     content_path = "/room/#{room_id}/uploads/#{upload_id}/#{CGI.escape(filename)}"
@@ -107,10 +114,13 @@ def export_upload(message, directory)
   rescue Campfire::ExportException => e
     if e.code == 404
       # If the upload 404s, that probably means it was subsequently deleted.
+      @deleted_uploads += 1
       puts "***deleted***"
     else
       log_error("export of #{directory}/#{message_body} failed: #{e}")
     end
+  rescue
+    log_error("exception during export of #{directory}/#{message_body}: $!")
   end
 end
 
@@ -214,6 +224,7 @@ def export_day(room, id, date)
 
     # Only export transcripts that contain at least one message.
     if messages.length > 0
+      @transcripts_found += 1
       puts "exporting transcripts"
       FileUtils.mkdir_p export_dir
 
@@ -236,9 +247,52 @@ def export_day(room, id, date)
   end
 end
 
+def verify_export(export_directory, expected_transcripts, expected_uploads)
+  actual_xml = 0
+  actual_html = 0
+  actual_plaintext = 0
+  actual_uploads = 0
+
+  Find.find(export_directory) do |path|
+    if FileTest.file?(path)
+      filename = File.basename(path)
+      if filename == 'transcript.xml'
+        actual_xml += 1
+      elsif filename == 'transcript.html'
+        actual_html += 1
+      elsif filename == 'transcript.txt'
+        actual_plaintext += 1
+      elsif filename == 'export_errors.txt'
+        next
+      else
+        actual_uploads += 1
+      end
+    end
+  end
+
+  if actual_xml != expected_transcripts
+    log_error("Expected #{expected_transcripts} XML transcripts, but only found #{actual_xml}!")
+  end
+
+  if actual_html != expected_transcripts
+    log_error("Expected #{expected_transcripts} HTML transcripts, but only found #{actual_html}!")
+  end
+
+  if actual_plaintext != expected_transcripts
+    log_error("Expected #{expected_transcripts} plaintext transcripts, but only found #{actual_plaintext}!")
+  end
+
+  if actual_uploads != expected_uploads
+    log_error("Expected #{expected_uploads} uploads, but only found #{actual_uploads}!")
+  end
+end
+
 begin
+  @transcripts_found     = 0
   @upload_messages_found = 0
+  @deleted_uploads       = 0
   @filename_mismatches   = 0
+
   doc = Nokogiri::XML get('/rooms.xml').body
   doc.css('room').each do |room_xml|
     room = room_xml.css('name').text
@@ -254,8 +308,13 @@ begin
     end
   end
 
-  puts "Should have exported #{@upload_messages_found} file(s)."
-  log_error("#{@filename_mismatches} filename mismatch(es).")
+  net_uploads = @upload_messages_found - @deleted_uploads
+  puts "Exported #{@transcripts_found} transcript(s) and #{net_uploads} uploaded file(s)."
+  verify_export('campfire', @transcripts_found, net_uploads)
+
+  if @filename_mismatches > 0
+    log_error("Encountered #{@filename_mismatches} filename mismatch(es).")
+  end
 rescue Campfire::ExportException => e
   log_error("room list download failed: #{e}")
 end
