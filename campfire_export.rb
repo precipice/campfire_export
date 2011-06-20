@@ -44,7 +44,7 @@ end
 def log_error(message)
   puts "*** Error: #{message}"
   open("campfire/export_errors.txt", 'a') do |log|
-    log.write "#{message}"
+    log.write "#{message}\n"
   end
 end
 
@@ -90,14 +90,24 @@ def export_upload(message, directory)
     # Get the upload itself and export it.
     upload_id = upload.css('id').text
     filename = upload.css('name').text
+
+    if filename != message_body
+      @filename_mismatches += 1
+      log_error("Filename mismatch for room #{room_id}, message #{message_id}, upload #{upload_id}:\n  Message body: #{message_body}\n  Filename:     #{filename}\n")
+    end
+
     content_path = "/room/#{room_id}/uploads/#{upload_id}/#{CGI.escape(filename)}"
     content = get(content_path)
+
     puts "exporting"
-    export(content, directory, filename, 'wb')
+    # NOTE: using the message_body instead of the filename to save exported
+    # files, because of a bug in filenames causing name collisions. See the
+    # "filename mismatch" warning above.
+    export(content, directory, message_body, 'wb')
   rescue Campfire::ExportException => e
     if e.code == 404
       # If the upload 404s, that probably means it was subsequently deleted.
-      puts "deleted"
+      puts "***deleted***"
     else
       log_error("export of #{directory}/#{message_body} failed: #{e}")
     end
@@ -107,6 +117,7 @@ end
 def export_uploads(messages, export_dir)
   messages.each do |message|
     if message.css('type').text == "UploadMessage"
+      @upload_messages_found += 1
       export_upload(message, export_dir)
     end
   end
@@ -226,6 +237,8 @@ def export_day(room, id, date)
 end
 
 begin
+  @upload_messages_found = 0
+  @filename_mismatches   = 0
   doc = Nokogiri::XML get('/rooms.xml').body
   doc.css('room').each do |room_xml|
     room = room_xml.css('name').text
@@ -240,6 +253,9 @@ begin
       sleep(1.0/10.0)
     end
   end
+
+  puts "Should have exported #{@upload_messages_found} file(s)."
+  log_error("#{@filename_mismatches} filename mismatch(es).")
 rescue Campfire::ExportException => e
   log_error("room list download failed: #{e}")
 end
