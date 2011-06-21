@@ -74,10 +74,13 @@ def log_error(message)
   end
 end
 
+def api_url(path)
+  "#{BASE_URL}#{path}"
+end
+
 def get(path, params = {})
-  url = "#{BASE_URL}#{path}"
-  response = HTTParty.get url, :query => params,
-    :basic_auth => {:username => API_TOKEN, :password => 'X'}
+  response = HTTParty.get(api_url(path), :query => params,
+    :basic_auth => {:username => API_TOKEN, :password => 'X'})
 
   if response.code >= 400
     raise Campfire::ExportException.new(url, response.message, response.code)
