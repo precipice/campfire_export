@@ -100,8 +100,8 @@ def export(content, directory, filename, mode='w')
   open("#{directory}/#{filename}", mode) do |file|
     begin
       file.write content
-    rescue
-      log_error("export of #{directory}/#{filename} failed: #{$!}")
+    rescue => e
+      log_error("export of #{directory}/#{filename} failed:\n#{e.backtrace}\n")
     end
   end
 end
@@ -145,10 +145,12 @@ def export_upload(message, directory)
       @deleted_uploads += 1
       puts "***deleted***"
     else
-      log_error("export of #{directory}/#{message_body} failed: #{e}")
+      log_error("export of #{directory}/#{message_body} failed:\n" +
+                "#{e.backtrace}\n")
     end
-  rescue
-    log_error("exception during export of #{directory}/#{message_body}: $!")
+  rescue => e
+    log_error("exception in export of #{directory}/#{message_body}:\n" +
+              "#{e.backtrace}\n")
   end
 end
 
