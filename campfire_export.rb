@@ -99,6 +99,7 @@ end
 
 def export(content, directory, filename, mode='w')
   if File.exists?("#{directory}/#{filename}")
+    @existing_files += 1
     log_error("export of #{directory}/#{filename} failed:\n" +
               "file already exists!\n")
   else
@@ -347,6 +348,7 @@ begin
   @upload_messages_found = 0
   @deleted_uploads       = 0
   @filename_mismatches   = 0
+  @existing_files        = 0
 
   doc = Nokogiri::XML get('/rooms.xml').body
   doc.css('room').each do |room_xml|
@@ -370,6 +372,10 @@ begin
 
   if @filename_mismatches > 0
     log_error("Encountered #{@filename_mismatches} filename mismatch(es).")
+  end
+
+  if @existing_files > 0
+    log_error("Encountered #{@existing_files} existing file(s).")
   end
 rescue Campfire::ExportException => e
   log_error("room list download failed: #{e}")
