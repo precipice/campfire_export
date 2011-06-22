@@ -79,7 +79,8 @@ def api_url(path)
 end
 
 def get(path, params = {})
-  response = HTTParty.get(api_url(path), :query => params,
+  url = api_url(path)
+  response = HTTParty.get(url, :query => params,
     :basic_auth => {:username => API_TOKEN, :password => 'X'})
 
   if response.code >= 400
