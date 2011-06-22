@@ -97,11 +97,17 @@ def username(id)
 end
 
 def export(content, directory, filename, mode='w')
-  open("#{directory}/#{filename}", mode) do |file|
-    begin
-      file.write content
-    rescue => e
-      log_error("export of #{directory}/#{filename} failed:\n#{e.backtrace}\n")
+  if File.exists?("#{directory}/#{filename}")
+    log_error("export of #{directory}/#{filename} failed:\n" +
+              "file already exists!\n")
+  else
+    open("#{directory}/#{filename}", mode) do |file|
+      begin
+        file.write content
+      rescue => e
+        log_error("export of #{directory}/#{filename} failed:\n" +
+                  "#{e.backtrace.join("\n")}\n")
+      end
     end
   end
 end
@@ -119,19 +125,31 @@ def export_upload(message, directory)
     # Get the upload itself and export it.
     upload_id = upload.css('id').text
     filename = upload.css('name').text
+    full_url = upload.css('full-url').text
 
     if filename != message_body
       @filename_mismatches += 1
-      log_error("Filename mismatch for room #{room_id}, message #{message_id}, upload #{upload_id}:\n  Message body: #{message_body}\n  Filename:     #{filename}")
-      regex = Regexp.new('^(.*?)\-[^\-.]+(\.\w+)$', true)
-      if regex.match(message_body).to_a.slice(1..-1).join('') == filename
-        log_error("Test pattern matches.\n")
-      else
-        log_error("*** Test pattern does NOT match. ***\n")
+      log_error("Filename mismatch for room #{room_id}, " +
+                "message #{message_id}, upload #{upload_id},\n" +
+                "in #{directory}:\n" +
+                "  Message body: #{message_body}\n" +
+                "  Filename:     #{filename}")
+
+      begin
+        # Check the mismatched names against a pattern to pin down the bug.
+        regex = Regexp.new('^(.*?)\-[^\-.]+(\.\w+)$', true)
+        if regex.match(message_body).to_a.slice(1..-1).join('') == filename
+          log_error("Test pattern matches.\n")
+        else
+          log_error("*** Test pattern does NOT match. ***\n")
+        end
+      rescue => e
+        log_error("Test pattern failed to run.\n")
       end
     end
 
-    content_path = "/room/#{room_id}/uploads/#{upload_id}/#{CGI.escape(filename)}"
+    escaped_name = CGI.escape(filename)
+    content_path = "/room/#{room_id}/uploads/#{upload_id}/#{escaped_name}"
     content = get(content_path)
 
     puts "exporting"
@@ -141,16 +159,16 @@ def export_upload(message, directory)
     export(content, directory, message_body, 'wb')
   rescue Campfire::ExportException => e
     if e.code == 404
-      # If the upload 404s, that probably means it was subsequently deleted.
+      # If the upload 404s, that should mean it was subsequently deleted.
       @deleted_uploads += 1
       puts "***deleted***"
     else
-      log_error("export of #{directory}/#{message_body} failed:\n" +
-                "#{e.backtrace}\n")
+      log_error("download of #{directory}/#{message_body} failed:\n" +
+                "#{e.backtrace.join("\n")}\n")
     end
   rescue => e
     log_error("exception in export of #{directory}/#{message_body}:\n" +
-              "#{e.backtrace}\n")
+              "#{e.backtrace.join("\n")}\n")
   end
 end
 
@@ -231,11 +249,12 @@ def zero_pad(number)
 end
 
 def directory_for(room, date)
-  "campfire/#{SUBDOMAIN}/#{room}/#{date.year}/#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
+  "campfire/#{SUBDOMAIN}/#{room}/#{date.year}/" +
+    "#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
 end
 
 def plaintext_transcript(messages, room, date)
-  plaintext = "#{room} transcript for #{date.year}-#{date.mon}-#{date.mday}\n\n"
+  plaintext = "#{room}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
   messages.each do |message|
     message_text = message_to_string(message)
     plaintext << message_text << "\n" if message_text.length > 0
@@ -248,7 +267,8 @@ def export_day(room, id, date)
   print "#{export_dir} ... "
 
   begin
-    transcript_path = "/room/#{id}/transcript/#{date.year}/#{date.mon}/#{date.mday}"
+    transcript_path = "/room/#{id}/transcript/#{date.year}/" +
+                      "#{date.mon}/#{date.mday}"
     transcript_xml = Nokogiri::XML get("#{transcript_path}.xml").body
     messages = transcript_xml.css('message')
 
@@ -301,19 +321,23 @@ def verify_export(export_directory, expected_transcripts, expected_uploads)
   end
 
   if actual_xml != expected_transcripts
-    log_error("Expected #{expected_transcripts} XML transcripts, but only found #{actual_xml}!")
+    log_error("Expected #{expected_transcripts} XML transcripts, " +
+              "but only found #{actual_xml}!")
   end
 
   if actual_html != expected_transcripts
-    log_error("Expected #{expected_transcripts} HTML transcripts, but only found #{actual_html}!")
+    log_error("Expected #{expected_transcripts} HTML transcripts, " +
+              "but only found #{actual_html}!")
   end
 
   if actual_plaintext != expected_transcripts
-    log_error("Expected #{expected_transcripts} plaintext transcripts, but only found #{actual_plaintext}!")
+    log_error("Expected #{expected_transcripts} plaintext transcripts, " +
+              "but only found #{actual_plaintext}!")
   end
 
   if actual_uploads != expected_uploads
-    log_error("Expected #{expected_uploads} uploads, but only found #{actual_uploads}!")
+    log_error("Expected #{expected_uploads} uploads, " +
+              "but only found #{actual_uploads}!")
   end
 end
 
@@ -339,7 +363,8 @@ begin
   end
 
   net_uploads = @upload_messages_found - @deleted_uploads
-  puts "Exported #{@transcripts_found} transcript(s) and #{net_uploads} uploaded file(s)."
+  puts "Exported #{@transcripts_found} transcript(s) " +
+       "and #{net_uploads} uploaded file(s)."
   verify_export('campfire', @transcripts_found, net_uploads)
 
   if @filename_mismatches > 0
