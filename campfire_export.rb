@@ -65,6 +65,87 @@ module Campfire
       "<#{resource}>: #{code} #{message}"
     end
   end
+
+  class Message
+    attr_accessor :id, :room_id, :body, :type, :user, :timestamp
+
+    def initialize(message)
+      @id = message.css('id').text
+      @room_id = message.css('room-id').text
+      @body = message.css('body').text
+      @type = message.css('type').text
+
+      if @type != 'TimestampMessage'
+        begin
+          @user = username(message.css('user-id').text)
+        rescue Campfire::ExportException
+          @user = "[unknown user]"
+        end
+      else
+        @user = ''
+      end
+
+      # FIXME: I imagine this needs to account for time zone.
+      time = Time.parse message.css('created-at').text
+      @timestamp = time.strftime '[%H:%M:%S]'
+    end
+
+    def username(id)
+      @@usernames     ||= {}
+      @@usernames[id] ||= begin
+        doc = Nokogiri::XML get("/users/#{id}.xml").body
+        doc.css('name').text
+      end
+    end
+
+    def indent(string, count)
+      (' ' * count) + string.gsub(/(\n+)/) { $1 + (' ' * count) }
+    end
+
+    def to_s
+      case type
+      when 'EnterMessage'
+        "#{timestamp} #{user} has entered the room"
+      when 'KickMessage', 'LeaveMessage'
+        "#{timestamp} #{user} has left the room"
+      when 'TextMessage'
+        "#{timestamp} #{user}: #{body}"
+      when 'UploadMessage'
+        "#{timestamp} #{user} uploaded: #{body}"
+      when 'PasteMessage'
+        "#{timestamp} #{user} pasted:\n#{indent(body, 2)}"
+      when 'TopicChangeMessage'
+        "#{timestamp} #{user} changed the topic to: #{body}"
+      when 'ConferenceCreatedMessage'
+        "#{timestamp} #{user} created conference: #{body}"
+      when 'AllowGuestsMessage'
+        "#{timestamp} #{user} opened the room to guests"
+      when 'DisallowGuestsMessage'
+        "#{timestamp} #{user} closed the room to guests"
+      when 'LockMessage'
+        "#{timestamp} #{user} locked the room"
+      when 'UnlockMessage'
+        "#{timestamp} #{user} unlocked the room"
+      when 'IdleMessage'
+        "#{timestamp} #{user} became idle"
+      when 'UnidleMessage'
+        "#{timestamp} #{user} became active"
+      when 'TweetMessage'
+        "#{timestamp} #{user} tweeted: #{body}"
+      when 'SoundMessage'
+        "#{timestamp} #{user} played a sound: #{body}"
+      when 'TimestampMessage'
+        ""
+      when 'SystemMessage'
+        ""
+      when 'AdvertisementMessage'
+        ""
+      else
+        log_error("unknown message type: #{type} - '#{body}'")
+        ""
+      end
+    end
+  end
 end
 
 def log_error(message)
@@ -89,14 +170,6 @@ def get(path, params = {})
   response
 end
 
-def username(id)
-  @usernames     ||= {}
-  @usernames[id] ||= begin
-    doc = Nokogiri::XML get("/users/#{id}.xml").body
-    doc.css('name').text
-  end
-end
-
 def export(content, directory, filename, mode='w')
   if File.exists?("#{directory}/#{filename}")
     @existing_files += 1
@@ -117,11 +190,8 @@ end
 def export_upload(message, directory)
   begin
     # Get the upload object corresponding to this message.
-    room_id = message.css('room-id').text
-    message_id = message.css('id').text
-    message_body = message.css('body').text
-    print "#{directory}/#{message_body} ... "
-    upload_path = "/room/#{room_id}/messages/#{message_id}/upload.xml"
+    print "#{directory}/#{message.body} ... "
+    upload_path = "/room/#{message.room_id}/messages/#{message.id}/upload.xml"
     upload = Nokogiri::XML get(upload_path).body
 
     # Get the upload itself and export it.
@@ -129,18 +199,18 @@ def export_upload(message, directory)
     filename = upload.css('name').text
     full_url = upload.css('full-url').text
 
-    if filename != message_body
+    if filename != message.body
       @filename_mismatches += 1
-      log_error("Filename mismatch for room #{room_id}, " +
-                "message #{message_id}, upload #{upload_id},\n" +
+      log_error("Filename mismatch for room #{message.room_id}, " +
+                "message #{message.id}, upload #{upload_id},\n" +
                 "in #{directory}:\n" +
-                "  Message body: #{message_body}\n" +
+                "  Message body: #{message.body}\n" +
                 "  Filename:     #{filename}")
 
       begin
         # Check the mismatched names against a pattern to pin down the bug.
         regex = Regexp.new('^(.*?)\-[^\-.]+(\.\w+)$', true)
-        if regex.match(message_body).to_a.slice(1..-1).join('') == filename
+        if regex.match(message.body).to_a.slice(1..-1).join('') == filename
           log_error("Test pattern matches.\n")
         else
           log_error("*** Test pattern does NOT match. ***\n")
@@ -151,98 +221,36 @@ def export_upload(message, directory)
     end
 
     escaped_name = CGI.escape(filename)
-    content_path = "/room/#{room_id}/uploads/#{upload_id}/#{escaped_name}"
+    content_path = "/room/#{message.room_id}/uploads/#{upload_id}/#{escaped_name}"
     content = get(content_path)
 
     puts "exporting"
-    # NOTE: using the message_body instead of the filename to save exported
+    # NOTE: using the message.body instead of the filename to save exported
     # files, because of a bug in filenames causing name collisions. See the
     # "filename mismatch" warning above.
-    export(content, directory, message_body, 'wb')
+    export(content, directory, message.body, 'wb')
   rescue Campfire::ExportException => e
     if e.code == 404
       # If the upload 404s, that should mean it was subsequently deleted.
       @deleted_uploads += 1
       puts "***deleted***"
     else
-      log_error("download of #{directory}/#{message_body} failed:\n" +
+      log_error("download of #{directory}/#{message.body} failed:\n" +
                 "#{e.backtrace.join("\n")}\n")
     end
   rescue => e
-    log_error("exception in export of #{directory}/#{message_body}:\n" +
+    log_error("exception in export of #{directory}/#{message.body}:\n" +
               "#{e.backtrace.join("\n")}\n")
   end
 end
 
 def export_uploads(messages, export_dir)
   messages.each do |message|
-    if message.css('type').text == "UploadMessage"
+    message_object = Campfire::Message.new(message)
+    if message_object.type == "UploadMessage"
       @upload_messages_found += 1
-      export_upload(message, export_dir)
+      export_upload(message_object, export_dir)
     end
-  end
-end
-
-def indent(string, count)
-  (' ' * count) + string.gsub(/(\n+)/) { $1 + (' ' * count) }
-end
-
-def message_to_string(message)
-  type = message.css('type').text
-  if type != 'TimestampMessage'
-    begin
-      user = username(message.css('user-id').text)
-    rescue Campfire::ExportException
-      user = "[unknown user]"
-    end
-  end
-  
-  body = message.css('body').text
-
-  # FIXME: I imagine this needs to account for time zone.
-  time = Time.parse message.css('created-at').text
-  timestamp = time.strftime '[%H:%M:%S]'
-  
-  case type
-  when 'EnterMessage'
-    "#{timestamp} #{user} has entered the room"
-  when 'KickMessage', 'LeaveMessage'
-    "#{timestamp} #{user} has left the room"
-  when 'TextMessage'
-    "#{timestamp} #{user}: #{body}"
-  when 'UploadMessage'
-    "#{timestamp} #{user} uploaded: #{body}"
-  when 'PasteMessage'
-    "#{timestamp} #{user} pasted:\n#{indent(body, 4)}"
-  when 'TopicChangeMessage'
-    "#{timestamp} #{user} changed the topic to: #{body}"
-  when 'ConferenceCreatedMessage'
-    "#{timestamp} #{user} created conference: #{body}"
-  when 'AllowGuestsMessage'
-    "#{timestamp} #{user} opened the room to guests"
-  when 'DisallowGuestsMessage'
-    "#{timestamp} #{user} closed the room to guests"
-  when 'LockMessage'
-    "#{timestamp} #{user} locked the room"
-  when 'UnlockMessage'
-    "#{timestamp} #{user} unlocked the room"
-  when 'IdleMessage'
-    "#{timestamp} #{user} became idle"
-  when 'UnidleMessage'
-    "#{timestamp} #{user} became active"
-  when 'TweetMessage'
-    "#{timestamp} #{user} tweeted: #{body}"
-  when 'SoundMessage'
-    "#{timestamp} #{user} played a sound: #{body}"
-  when 'TimestampMessage'
-    ""
-  when 'SystemMessage'
-    ""
-  when 'AdvertisementMessage'
-    ""
-  else
-    log_error("unknown message type: #{type} - '#{body}'")
-    ""
   end
 end
 
@@ -258,8 +266,8 @@ end
 def plaintext_transcript(messages, room, date)
   plaintext = "#{room}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
   messages.each do |message|
-    message_text = message_to_string(message)
-    plaintext << message_text << "\n" if message_text.length > 0
+    message_object = Campfire::Message.new(message)
+    plaintext << message_object.to_s << "\n" if message.text.length > 0
   end
   plaintext
 end
