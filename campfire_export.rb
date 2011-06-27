@@ -31,26 +31,16 @@ require 'find'
 require 'httparty'
 require 'nokogiri'
 require 'time'
+require 'yaml'
 
-###
-# Script configuration - all options are required.
+CONFIG = YAML.load_file("#{ENV['HOME']}/.campfire_config.yaml")
 
-# Export start date - the first transcript you want exported.
-START_DATE = Date.civil(2010, 1, 1)
-
-# Export end date - the last transcript you want exported, inclusive.
-END_DATE   = Date.civil(2010, 12, 31)
-
-# Your Campfire API token (see "My Info" on your Campfire site).
-API_TOKEN  = ''
-
-# Your Campfire subdomain (for 'https://myco.campfirenow.com', enter 'myco').
-SUBDOMAIN  = ''
-
-# End of configuration
-###
-
-BASE_URL = "https://#{SUBDOMAIN}.campfirenow.com"
+# FIXME: Quick hack to avoid putting these in an object, where they belong.
+API_TOKEN  = CONFIG['api_token']
+SUBDOMAIN  = CONFIG['subdomain']
+BASE_URL   = "https://#{SUBDOMAIN}.campfirenow.com"
+START_DATE = Date.parse(CONFIG['start_date'])
+END_DATE   = Date.parse(CONFIG['end_date'])
 
 module Campfire
   class ExportException < StandardError
@@ -67,7 +57,7 @@ module Campfire
   end
 
   class Message
-    attr_accessor :id, :room_id, :body, :type, :user, :timestamp
+    attr_accessor :id, :room_id, :body, :type, :user, :timestamp, :upload
 
     def initialize(message)
       @id = message.css('id').text
@@ -75,19 +65,20 @@ module Campfire
       @body = message.css('body').text
       @type = message.css('type').text
 
-      if @type != 'TimestampMessage'
+      # FIXME: I imagine this needs to account for time zone.
+      time = Time.parse message.css('created-at').text
+      @timestamp = time.strftime '[%H:%M:%S]'
+
+      no_user = ['TimestampMessage', 'SystemMessage', 'AdvertisementMessage']
+      unless no_user.include?(@type)
         begin
           @user = username(message.css('user-id').text)
         rescue Campfire::ExportException
           @user = "[unknown user]"
         end
-      else
-        @user = ''
       end
-
-      # FIXME: I imagine this needs to account for time zone.
-      time = Time.parse message.css('created-at').text
-      @timestamp = time.strftime '[%H:%M:%S]'
+            
+      @upload = Campfire::Upload.new(self) if is_upload?
     end
 
     def username(id)
@@ -96,6 +87,10 @@ module Campfire
         doc = Nokogiri::XML get("/users/#{id}.xml").body
         doc.css('name').text
       end
+    end
+
+    def is_upload?
+      @type == 'UploadMessage'
     end
 
     def indent(string, count)
@@ -146,6 +141,51 @@ module Campfire
       end
     end
   end
+  
+  class Upload
+    attr_accessor :message, :id, :filename, :content
+    attr_reader :exception
+    
+    def initialize(message)
+      @message = message
+      @deleted = false
+      
+      begin
+        # Get the upload object corresponding to this message.
+        upload_path = "/room/#{message.room_id}/messages/#{message.id}/upload.xml"
+        upload = Nokogiri::XML get(upload_path).body
+
+        # Get the upload itself and export it.
+        @id = upload.css('id').text
+        @filename = upload.css('name').text
+        
+        escaped_name = CGI.escape(filename)
+        content_path = "/room/#{message.room_id}/uploads/#{@id}/#{escaped_name}"
+        @content = get(content_path)
+      rescue Campfire::ExportException => e
+        if e.code == 404
+          # If the upload 404s, that should mean it was subsequently deleted.
+          @deleted = true
+        else
+          @exception = e
+        end
+      rescue => e
+        @exception = e
+      end
+    end
+    
+    def qualified_filename
+      "#{id}-#{filename}"
+    end
+    
+    def deleted?
+      @deleted
+    end
+    
+    def download_error?
+      exception != nil
+    end
+  end
 end
 
 def log_error(message)
@@ -172,7 +212,7 @@ end
 
 def export(content, directory, filename, mode='w')
   if File.exists?("#{directory}/#{filename}")
-    @existing_files += 1
+    # FIXME: keep a count of these somehow.
     log_error("export of #{directory}/#{filename} failed:\n" +
               "file already exists!\n")
   else
@@ -187,69 +227,21 @@ def export(content, directory, filename, mode='w')
   end
 end
 
-def export_upload(message, directory)
-  begin
-    # Get the upload object corresponding to this message.
-    print "#{directory}/#{message.body} ... "
-    upload_path = "/room/#{message.room_id}/messages/#{message.id}/upload.xml"
-    upload = Nokogiri::XML get(upload_path).body
-
-    # Get the upload itself and export it.
-    upload_id = upload.css('id').text
-    filename = upload.css('name').text
-    full_url = upload.css('full-url').text
-
-    if filename != message.body
-      @filename_mismatches += 1
-      log_error("Filename mismatch for room #{message.room_id}, " +
-                "message #{message.id}, upload #{upload_id},\n" +
-                "in #{directory}:\n" +
-                "  Message body: #{message.body}\n" +
-                "  Filename:     #{filename}")
-
-      begin
-        # Check the mismatched names against a pattern to pin down the bug.
-        regex = Regexp.new('^(.*?)\-[^\-.]+(\.\w+)$', true)
-        if regex.match(message.body).to_a.slice(1..-1).join('') == filename
-          log_error("Test pattern matches.\n")
-        else
-          log_error("*** Test pattern does NOT match. ***\n")
-        end
-      rescue => e
-        log_error("Test pattern failed to run.\n")
-      end
-    end
-
-    escaped_name = CGI.escape(filename)
-    content_path = "/room/#{message.room_id}/uploads/#{upload_id}/#{escaped_name}"
-    content = get(content_path)
-
-    puts "exporting"
-    # NOTE: using the message.body instead of the filename to save exported
-    # files, because of a bug in filenames causing name collisions. See the
-    # "filename mismatch" warning above.
-    export(content, directory, message.body, 'wb')
-  rescue Campfire::ExportException => e
-    if e.code == 404
-      # If the upload 404s, that should mean it was subsequently deleted.
-      @deleted_uploads += 1
-      puts "***deleted***"
-    else
-      log_error("download of #{directory}/#{message.body} failed:\n" +
-                "#{e.backtrace.join("\n")}\n")
-    end
-  rescue => e
-    log_error("exception in export of #{directory}/#{message.body}:\n" +
-              "#{e.backtrace.join("\n")}\n")
-  end
-end
-
 def export_uploads(messages, export_dir)
   messages.each do |message|
-    message_object = Campfire::Message.new(message)
-    if message_object.type == "UploadMessage"
-      @upload_messages_found += 1
-      export_upload(message_object, export_dir)
+    if message.is_upload?
+      upload = message.upload
+      print "    #{upload.qualified_filename} ... "
+      export(upload.content, export_dir, upload.qualified_filename, 'wb')
+      
+      if upload.deleted?
+        puts "deleted"
+      elsif upload.download_error?
+        log_error("export of #{export_dir}/#{upload.filename} failed:\n" +
+          "#{upload.exception.backtrace.join("\n")}")
+      else
+        puts "ok"
+      end
     end
   end
 end
@@ -266,8 +258,9 @@ end
 def plaintext_transcript(messages, room, date)
   plaintext = "#{room}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
   messages.each do |message|
-    message_object = Campfire::Message.new(message)
-    plaintext << message_object.to_s << "\n" if message.text.length > 0
+    # FIXME: this is ugly.
+    plaintext_message = message.to_s
+    plaintext << plaintext_message << "\n" if plaintext_message.length > 0
   end
   plaintext
 end
@@ -280,11 +273,12 @@ def export_day(room, id, date)
     transcript_path = "/room/#{id}/transcript/#{date.year}/" +
                       "#{date.mon}/#{date.mday}"
     transcript_xml = Nokogiri::XML get("#{transcript_path}.xml").body
-    messages = transcript_xml.css('message')
+    messages = transcript_xml.css('message').map do |message|
+      Campfire::Message.new(message)
+    end
 
     # Only export transcripts that contain at least one message.
     if messages.length > 0
-      @transcripts_found += 1
       puts "exporting transcripts"
       FileUtils.mkdir_p export_dir
 
@@ -352,11 +346,12 @@ def verify_export(export_directory, expected_transcripts, expected_uploads)
 end
 
 begin
-  @transcripts_found     = 0
-  @upload_messages_found = 0
-  @deleted_uploads       = 0
-  @filename_mismatches   = 0
-  @existing_files        = 0
+  # FIXME: run export stats a different way.
+  # @transcripts_found     = 0
+  # @upload_messages_found = 0
+  # @deleted_uploads       = 0
+  # @filename_mismatches   = 0
+  # @existing_files        = 0
 
   doc = Nokogiri::XML get('/rooms.xml').body
   doc.css('room').each do |room_xml|
@@ -373,18 +368,18 @@ begin
     end
   end
 
-  net_uploads = @upload_messages_found - @deleted_uploads
-  puts "Exported #{@transcripts_found} transcript(s) " +
-       "and #{net_uploads} uploaded file(s)."
-  verify_export('campfire', @transcripts_found, net_uploads)
-
-  if @filename_mismatches > 0
-    log_error("Encountered #{@filename_mismatches} filename mismatch(es).")
-  end
-
-  if @existing_files > 0
-    log_error("Encountered #{@existing_files} existing file(s).")
-  end
+  # net_uploads = @upload_messages_found - @deleted_uploads
+  # puts "Exported #{@transcripts_found} transcript(s) " +
+  #      "and #{net_uploads} uploaded file(s)."
+  # verify_export('campfire', @transcripts_found, net_uploads)
+  # 
+  # if @filename_mismatches > 0
+  #   log_error("Encountered #{@filename_mismatches} filename mismatch(es).")
+  # end
+  # 
+  # if @existing_files > 0
+  #   log_error("Encountered #{@existing_files} existing file(s).")
+  # end
 rescue Campfire::ExportException => e
   log_error("room list download failed: #{e}")
 end

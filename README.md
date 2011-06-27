@@ -38,10 +38,10 @@ Then install required gems via Bundler:
 
 ## Configuring ##
 
-There are a number of configuration variables clearly marked at the top of
-`campfire_export.rb`. The script won't run without them. Make sure to edit
-them before running the script, and also make sure **not** to check in your API
-token on any public source repo.
+There are a number of configuration variables required to run the export.
+Copy the `campfire_config-template.yaml` file from this project to 
+`.campfire_config.yaml` in your home directory, and then modify it
+as described in that file.
 
 The `START_DATE` and `END_DATE` variables are inclusive (that is, if your
 end date is Dec 31, 2010, a transcript for that date will be downloaded).
@@ -51,9 +51,11 @@ end date is Dec 31, 2010, a transcript for that date will be downloaded).
 Just run `ruby campfire_export.rb` and your transcripts will be exported into
 a `campfire` directory, with subdirectories for each site/room/year/month/day.
 In those directories, any uploaded files will be saved with their original
-filenames. (Note that rooms and uploaded files may have odd filenames -- for
-instance, spaces in the file/directory names.) Errors that happen trying to
-export will be logged to `campfire/export_errors.txt`.
+filenames, prepended by the upload ID (since transcripts often have the same
+filename uploaded multiple times, e.g. `Picture 1.png`). (Note that rooms and
+uploaded files may have odd filenames -- for instance, spaces in the
+file/directory names.) Errors that happen trying to export will be logged to
+`campfire/export_errors.txt`.
 
 The Gist I forked had a plaintext transcript export, which I preserved as
 `transcript.txt` in each directory. However, the original XML and HTML are now
