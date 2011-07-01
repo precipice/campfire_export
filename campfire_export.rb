@@ -174,10 +174,6 @@ module Campfire
       end
     end
     
-    def qualified_filename
-      "#{id}-#{filename}"
-    end
-    
     def deleted?
       @deleted
     end
@@ -231,8 +227,18 @@ def export_uploads(messages, export_dir)
   messages.each do |message|
     if message.is_upload?
       upload = message.upload
-      print "    #{upload.qualified_filename} ... "
-      export(upload.content, export_dir, upload.qualified_filename, 'wb')
+      
+      # Write uploads to a subdirectory, using the upload ID as a directory
+      # name to avoid overwriting multiple uploads of the same file within
+      # the same day (for instance, if 'Picture 1.png' is uploaded twice
+      # in a day, this will preserve both copies). This path pattern also
+      # matches the tail of the upload path in the HTML transcript, making
+      # it easier to make downloads functional from the HTML transcripts.
+      upload_dir = "#{export_dir}/uploads/#{upload.id}"
+      print "    uploads/#{upload.id}/#{upload.filename} ... "
+      
+      FileUtils.mkdir_p "#{upload_dir}"
+      export(upload.content, upload_dir, upload.filename, 'wb')
       
       if upload.deleted?
         puts "deleted"
