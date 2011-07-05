@@ -33,30 +33,192 @@ require 'nokogiri'
 require 'time'
 require 'yaml'
 
-CONFIG = YAML.load_file("#{ENV['HOME']}/.campfire_config.yaml")
+module CampfireExport
+  module IO
+    def api_url(path)
+      "#{CampfireExport::Account.base_url}#{path}"
+    end
 
-# FIXME: Quick hack to avoid putting these in an object, where they belong.
-API_TOKEN  = CONFIG['api_token']
-SUBDOMAIN  = CONFIG['subdomain']
-BASE_URL   = "https://#{SUBDOMAIN}.campfirenow.com"
-START_DATE = Date.parse(CONFIG['start_date'])
-END_DATE   = Date.parse(CONFIG['end_date'])
+    def get(path, params = {})
+      url = api_url(path)
+      response = HTTParty.get(url, :query => params, :basic_auth => 
+        {:username => CampfireExport::Account.api_token, :password => 'X'})
 
-module Campfire
-  class ExportException < StandardError
+      if response.code >= 400
+        raise CampfireExport::Exception.new(url, response.message, response.code)
+      end
+      response
+    end
+    
+    def zero_pad(number)
+      "%02d" % number
+    end
+
+    def export_dir
+      "campfire/#{CampfireExport::Account.subdomain}/#{room}/#{date.year}/" +
+        "#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
+    end
+    
+    def export_file(content, directory, filename, mode='w')
+      if File.exists?("#{directory}/#{filename}")
+        log(:error, "#{directory}/#{filename} failed: file already exists.")
+      else
+        open("#{directory}/#{filename}", mode) do |file|
+          begin
+            file.write content
+          rescue => e
+            log(:error, "#{directory}/#{filename} failed: " +
+              "#{e.backtrace.join("\n")}")
+          end
+        end
+      end
+    end
+    
+    def log(level, message)
+      case level
+      when :error
+        puts "*** Error: #{message}"
+        open("campfire/export_errors.txt", 'a') do |log|
+          log.write "#{message}\n"
+        end
+      else
+        puts message
+      end
+    end
+  end
+  
+  class Exception < StandardError
     attr_accessor :resource, :message, :code
-    def initialize(resource, message, code)
+    def initialize(resource, message, code=nil)
       @resource = resource
       @message = message
       @code = code
     end
 
     def to_s
-      "<#{resource}>: #{code} #{message}"
+      "<#{resource}>: #{message}" + (" (#{code})" if code)
     end
   end
 
+  class Account
+    include CampfireExport::IO
+    
+    @subdomain = ""
+    @api_key   = ""
+    @base_url  = ""
+    
+    class << self
+      attr_accessor :subdomain, :api_key, :base_url
+    end
+    
+    def initialize(subdomain, api_key)
+      self.subdomain = subdomain
+      self.api_key   = api_key
+      self.base_url  = "https://#{subdomain}.campfirenow.com"
+    end
+    
+    def export(start_date, end_date)
+      begin
+        doc = Nokogiri::XML get('/rooms.xml').body
+        doc.css('room').each do |room_xml|
+          room = CampfireExport::Room(room_xml)
+          room.export(start_date, end_date)
+        end
+      rescue CampfireExport::Exception => e
+        log(:error, "room list download failed: #{e}")
+      end
+    end
+  end
+
+  class Room
+    include CampfireExport::IO
+    attr_accessor :id, :name, :created_at
+    
+    def initialize(room, start_date, end_date)
+      @id         = room.css('id').text
+      @room       = room.css('name').text
+      @created_at = room.css('created-at').text
+      @start_date = start_date
+      @end_date   = end_date
+    end
+    
+    def export
+      date = @start_date
+
+      while date <= @end_date
+        transcript = CampfireExport::Transcript(room, id, date)
+        transcript.export
+
+        # Ensure that we stay well below the 37signals API limits.
+        sleep(1.0/10.0)
+        date = date.next
+      end
+    end
+  end
+
+  class Transcript
+    include CampfireExport::IO
+    attr_accessor :subdomain, :room, :id, :date
+    
+    def initialize(subdomain, room, id, date)
+      @subdomain = subdomain
+      @room = room
+      @id = id
+      @date = date
+    end
+    
+    def export
+      begin
+        transcript_path = "/room/#{id}/transcript/#{date.year}/" +
+                          "#{date.mon}/#{date.mday}"
+        transcript_xml = Nokogiri::XML get("#{transcript_path}.xml").body
+        messages = transcript_xml.css('message').map do |message|
+          CampfireExport::Message.new(message)
+        end
+
+        # Only export transcripts that contain at least one message.
+        if messages.length > 0
+          log(:info, "exporting transcripts")
+          FileUtils.mkdir_p directory
+
+          export(transcript_xml, directory, 'transcript.xml')
+          plaintext = plaintext_transcript(messages, room, date)
+          export(plaintext, directory, 'transcript.txt')
+          export_uploads(messages, directory)
+
+          begin
+            transcript_html = get(transcript_path)
+            export(transcript_html, directory, 'transcript.html')
+          rescue CampfireExport::Exception => e
+            log(:error, "HTML transcript download for #{export_dir} failed: #{e}")
+          end
+        else
+          log(:info, "no messages")
+        end
+      rescue CampfireExport::Exception => e
+        log(:error, "transcript download for #{export_dir} failed: #{e}")
+      end
+    end
+    
+    def plaintext
+      text = "#{room}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
+      messages.each do |message|
+        text << message.to_s
+      end
+      text
+    end
+
+    def export_uploads
+      messages.each do |message|
+        if message.is_upload?
+          message.upload.export(directory)
+        end
+      end
+    end    
+  end
+  
   class Message
+    include CampfireExport::IO
     attr_accessor :id, :room_id, :body, :type, :user, :timestamp, :upload
 
     def initialize(message)
@@ -73,12 +235,12 @@ module Campfire
       unless no_user.include?(@type)
         begin
           @user = username(message.css('user-id').text)
-        rescue Campfire::ExportException
+        rescue CampfireExport::Exception
           @user = "[unknown user]"
         end
       end
             
-      @upload = Campfire::Upload.new(self) if is_upload?
+      @upload = CampfireExport::Upload.new(self) if is_upload?
     end
 
     def username(id)
@@ -100,35 +262,35 @@ module Campfire
     def to_s
       case type
       when 'EnterMessage'
-        "#{timestamp} #{user} has entered the room"
+        "#{timestamp} #{user} has entered the room\n"
       when 'KickMessage', 'LeaveMessage'
-        "#{timestamp} #{user} has left the room"
+        "#{timestamp} #{user} has left the room\n"
       when 'TextMessage'
-        "#{timestamp} #{user}: #{body}"
+        "#{timestamp} #{user}: #{body}\n"
       when 'UploadMessage'
-        "#{timestamp} #{user} uploaded: #{body}"
+        "#{timestamp} #{user} uploaded: #{body}\n"
       when 'PasteMessage'
         "#{timestamp} #{user} pasted:\n#{indent(body, 2)}"
       when 'TopicChangeMessage'
-        "#{timestamp} #{user} changed the topic to: #{body}"
+        "#{timestamp} #{user} changed the topic to: #{body}\n"
       when 'ConferenceCreatedMessage'
-        "#{timestamp} #{user} created conference: #{body}"
+        "#{timestamp} #{user} created conference: #{body}\n"
       when 'AllowGuestsMessage'
-        "#{timestamp} #{user} opened the room to guests"
+        "#{timestamp} #{user} opened the room to guests\n"
       when 'DisallowGuestsMessage'
-        "#{timestamp} #{user} closed the room to guests"
+        "#{timestamp} #{user} closed the room to guests\n"
       when 'LockMessage'
-        "#{timestamp} #{user} locked the room"
+        "#{timestamp} #{user} locked the room\n"
       when 'UnlockMessage'
-        "#{timestamp} #{user} unlocked the room"
+        "#{timestamp} #{user} unlocked the room\n"
       when 'IdleMessage'
-        "#{timestamp} #{user} became idle"
+        "#{timestamp} #{user} became idle\n"
       when 'UnidleMessage'
-        "#{timestamp} #{user} became active"
+        "#{timestamp} #{user} became active\n"
       when 'TweetMessage'
-        "#{timestamp} #{user} tweeted: #{body}"
+        "#{timestamp} #{user} tweeted: #{body}\n"
       when 'SoundMessage'
-        "#{timestamp} #{user} played a sound: #{body}"
+        "#{timestamp} #{user} played a sound: #{body}\n"
       when 'TimestampMessage'
         ""
       when 'SystemMessage'
@@ -136,13 +298,14 @@ module Campfire
       when 'AdvertisementMessage'
         ""
       else
-        log_error("unknown message type: #{type} - '#{body}'")
+        log(:error, "unknown message type: #{type} - '#{body}'")
         ""
       end
     end
   end
   
   class Upload
+    include CampfireExport::IO
     attr_accessor :message, :id, :filename, :content
     attr_reader :exception
     
@@ -181,211 +344,27 @@ module Campfire
     def download_error?
       exception != nil
     end
-  end
-end
-
-def log_error(message)
-  puts "*** Error: #{message}"
-  open("campfire/export_errors.txt", 'a') do |log|
-    log.write "#{message}\n"
-  end
-end
-
-def api_url(path)
-  "#{BASE_URL}#{path}"
-end
-
-def get(path, params = {})
-  url = api_url(path)
-  response = HTTParty.get(url, :query => params,
-    :basic_auth => {:username => API_TOKEN, :password => 'X'})
-
-  if response.code >= 400
-    raise Campfire::ExportException.new(url, response.message, response.code)
-  end
-  response
-end
-
-def export(content, directory, filename, mode='w')
-  if File.exists?("#{directory}/#{filename}")
-    # FIXME: keep a count of these somehow.
-    log_error("export of #{directory}/#{filename} failed:\n" +
-              "file already exists!\n")
-  else
-    open("#{directory}/#{filename}", mode) do |file|
-      begin
-        file.write content
-      rescue => e
-        log_error("export of #{directory}/#{filename} failed:\n" +
-                  "#{e.backtrace.join("\n")}\n")
-      end
-    end
-  end
-end
-
-def export_uploads(messages, export_dir)
-  messages.each do |message|
-    if message.is_upload?
-      upload = message.upload
-      
+    
+    def export(export_dir)
       # Write uploads to a subdirectory, using the upload ID as a directory
       # name to avoid overwriting multiple uploads of the same file within
       # the same day (for instance, if 'Picture 1.png' is uploaded twice
       # in a day, this will preserve both copies). This path pattern also
       # matches the tail of the upload path in the HTML transcript, making
       # it easier to make downloads functional from the HTML transcripts.
-      upload_dir = "#{export_dir}/uploads/#{upload.id}"
-      print "    uploads/#{upload.id}/#{upload.filename} ... "
-      
-      FileUtils.mkdir_p "#{upload_dir}"
-      export(upload.content, upload_dir, upload.filename, 'wb')
-      
-      if upload.deleted?
-        puts "deleted"
-      elsif upload.download_error?
-        log_error("export of #{export_dir}/#{upload.filename} failed:\n" +
-          "#{upload.exception.backtrace.join("\n")}")
+      upload_dir = "#{export_dir}/uploads/#{id}"
+      print "    uploads/#{id}/#{filename} ... "
+
+      if download_error?
+        log(:error, "export of #{export_dir}/#{filename} failed:\n" +
+          "#{exception.backtrace.join("\n")}")
+      elsif deleted?
+        log(:info, "deleted")
       else
-        puts "ok"
+        FileUtils.mkdir_p "#{upload_dir}"
+        export_file(content, upload_dir, filename, 'wb')
+        log(:info, "ok")
       end
     end
   end
-end
-
-def zero_pad(number)
-  "%02d" % number
-end
-
-def directory_for(room, date)
-  "campfire/#{SUBDOMAIN}/#{room}/#{date.year}/" +
-    "#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
-end
-
-def plaintext_transcript(messages, room, date)
-  plaintext = "#{room}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
-  messages.each do |message|
-    # FIXME: this is ugly.
-    plaintext_message = message.to_s
-    plaintext << plaintext_message << "\n" if plaintext_message.length > 0
-  end
-  plaintext
-end
-
-def export_day(room, id, date)
-  export_dir = directory_for(room, date)
-  print "#{export_dir} ... "
-
-  begin
-    transcript_path = "/room/#{id}/transcript/#{date.year}/" +
-                      "#{date.mon}/#{date.mday}"
-    transcript_xml = Nokogiri::XML get("#{transcript_path}.xml").body
-    messages = transcript_xml.css('message').map do |message|
-      Campfire::Message.new(message)
-    end
-
-    # Only export transcripts that contain at least one message.
-    if messages.length > 0
-      puts "exporting transcripts"
-      FileUtils.mkdir_p export_dir
-
-      export(transcript_xml, export_dir, 'transcript.xml')
-      plaintext = plaintext_transcript(messages, room, date)
-      export(plaintext, export_dir, 'transcript.txt')
-      export_uploads(messages, export_dir)
-
-      begin
-        transcript_html = get(transcript_path)
-        export(transcript_html, export_dir, 'transcript.html')
-      rescue Campfire::ExportException => e
-        log_error("HTML transcript download for #{export_dir} failed: #{e}")
-      end
-    else
-      puts "no messages"
-    end
-  rescue Campfire::ExportException => e
-    log_error("transcript download for #{export_dir} failed: #{e}")
-  end
-end
-
-def verify_export(export_directory, expected_transcripts, expected_uploads)
-  actual_xml = 0
-  actual_html = 0
-  actual_plaintext = 0
-  actual_uploads = 0
-
-  Find.find(export_directory) do |path|
-    if FileTest.file?(path)
-      filename = File.basename(path)
-      if filename == 'transcript.xml'
-        actual_xml += 1
-      elsif filename == 'transcript.html'
-        actual_html += 1
-      elsif filename == 'transcript.txt'
-        actual_plaintext += 1
-      elsif filename == 'export_errors.txt'
-        next
-      else
-        actual_uploads += 1
-      end
-    end
-  end
-
-  if actual_xml != expected_transcripts
-    log_error("Expected #{expected_transcripts} XML transcripts, " +
-              "but only found #{actual_xml}!")
-  end
-
-  if actual_html != expected_transcripts
-    log_error("Expected #{expected_transcripts} HTML transcripts, " +
-              "but only found #{actual_html}!")
-  end
-
-  if actual_plaintext != expected_transcripts
-    log_error("Expected #{expected_transcripts} plaintext transcripts, " +
-              "but only found #{actual_plaintext}!")
-  end
-
-  if actual_uploads != expected_uploads
-    log_error("Expected #{expected_uploads} uploads, " +
-              "but only found #{actual_uploads}!")
-  end
-end
-
-begin
-  # FIXME: run export stats a different way.
-  # @transcripts_found     = 0
-  # @upload_messages_found = 0
-  # @deleted_uploads       = 0
-  # @filename_mismatches   = 0
-  # @existing_files        = 0
-
-  doc = Nokogiri::XML get('/rooms.xml').body
-  doc.css('room').each do |room_xml|
-    room = room_xml.css('name').text
-    id   = room_xml.css('id').text
-    date = START_DATE
-
-    while date <= END_DATE
-      export_day(room, id, date)
-      date = date.next
-
-      # Ensure that we stay well below the 37signals API limits.
-      sleep(1.0/10.0)
-    end
-  end
-
-  # net_uploads = @upload_messages_found - @deleted_uploads
-  # puts "Exported #{@transcripts_found} transcript(s) " +
-  #      "and #{net_uploads} uploaded file(s)."
-  # verify_export('campfire', @transcripts_found, net_uploads)
-  # 
-  # if @filename_mismatches > 0
-  #   log_error("Encountered #{@filename_mismatches} filename mismatch(es).")
-  # end
-  # 
-  # if @existing_files > 0
-  #   log_error("Encountered #{@existing_files} existing file(s).")
-  # end
-rescue Campfire::ExportException => e
-  log_error("room list download failed: #{e}")
 end
