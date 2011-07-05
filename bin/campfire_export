@@ -12,5 +12,5 @@ require_relative '../lib/campfire_export'
 
 CONFIG = YAML.load_file("#{ENV['HOME']}/.campfire_config.yaml")
 
-account = Campfire::Account(CONFIG['subdomain'], CONFIG['api_key'])
+account = CampfireExport::Account.new(CONFIG['subdomain'], CONFIG['api_token'])
 account.export(Date.parse(CONFIG['start_date']), Date.parse(CONFIG['end_date']))

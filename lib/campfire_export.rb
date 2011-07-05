@@ -104,24 +104,24 @@ module CampfireExport
     include CampfireExport::IO
     
     @subdomain = ""
-    @api_key   = ""
+    @api_token = ""
     @base_url  = ""
     
     class << self
-      attr_accessor :subdomain, :api_key, :base_url
+      attr_accessor :subdomain, :api_token, :base_url
     end
     
-    def initialize(subdomain, api_key)
-      self.subdomain = subdomain
-      self.api_key   = api_key
-      self.base_url  = "https://#{subdomain}.campfirenow.com"
+    def initialize(subdomain, api_token)
+      CampfireExport::Account.subdomain = subdomain
+      CampfireExport::Account.api_token = api_token
+      CampfireExport::Account.base_url  = "https://#{subdomain}.campfirenow.com"
     end
     
     def export(start_date, end_date)
       begin
         doc = Nokogiri::XML get('/rooms.xml').body
         doc.css('room').each do |room_xml|
-          room = CampfireExport::Room(room_xml)
+          room = CampfireExport::Room.new(room_xml)
           room.export(start_date, end_date)
         end
       rescue CampfireExport::Exception => e
@@ -132,21 +132,19 @@ module CampfireExport
 
   class Room
     include CampfireExport::IO
-    attr_accessor :id, :name, :created_at
+    attr_accessor :id, :room, :created_at
     
-    def initialize(room, start_date, end_date)
+    def initialize(room)
       @id         = room.css('id').text
       @room       = room.css('name').text
       @created_at = room.css('created-at').text
-      @start_date = start_date
-      @end_date   = end_date
     end
     
-    def export
-      date = @start_date
+    def export(start_date, end_date)
+      date = start_date
 
-      while date <= @end_date
-        transcript = CampfireExport::Transcript(room, id, date)
+      while date <= end_date
+        transcript = CampfireExport::Transcript.new(id, room, date)
         transcript.export
 
         # Ensure that we stay well below the 37signals API limits.
@@ -158,12 +156,11 @@ module CampfireExport
 
   class Transcript
     include CampfireExport::IO
-    attr_accessor :subdomain, :room, :id, :date
+    attr_accessor :id, :room, :date
     
-    def initialize(subdomain, room, id, date)
-      @subdomain = subdomain
-      @room = room
+    def initialize(id, room, date)
       @id = id
+      @room = room
       @date = date
     end
     
