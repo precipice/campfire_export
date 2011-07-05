@@ -40,8 +40,7 @@ module CampfireExport
     end
 
     def get(path, params = {})
-      url = api_url(path)
-      response = HTTParty.get(url, :query => params, :basic_auth => 
+      response = HTTParty.get(api_url(path), :query => params, :basic_auth => 
         {:username => CampfireExport::Account.api_token, :password => 'X'})
 
       if response.code >= 400
@@ -55,19 +54,21 @@ module CampfireExport
     end
 
     def export_dir
-      "campfire/#{CampfireExport::Account.subdomain}/#{room}/#{date.year}/" +
-        "#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
+      # Requires that room and date be defined in the calling object.
+      "campfire/#{CampfireExport::Account.subdomain}/#{room.name}/" +
+        "#{date.year}/#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
     end
     
-    def export_file(content, directory, filename, mode='w')
-      if File.exists?("#{directory}/#{filename}")
-        log(:error, "#{directory}/#{filename} failed: file already exists.")
+    def export_file(content, filename, mode='w')
+      # Requires that room_name and date be defined in the calling object.
+      if File.exists?("#{export_dir}/#{filename}")
+        log(:error, "#{export_dir}/#{filename} failed: file already exists.")
       else
-        open("#{directory}/#{filename}", mode) do |file|
+        open("#{export_dir}/#{filename}", mode) do |file|
           begin
             file.write content
           rescue => e
-            log(:error, "#{directory}/#{filename} failed: " +
+            log(:error, "#{export_dir}/#{filename} failed: " +
               "#{e.backtrace.join("\n")}")
           end
         end
@@ -82,7 +83,8 @@ module CampfireExport
           log.write "#{message}\n"
         end
       else
-        puts message
+        print message
+        STDOUT.flush
       end
     end
   end
@@ -132,19 +134,23 @@ module CampfireExport
 
   class Room
     include CampfireExport::IO
-    attr_accessor :id, :room, :created_at
+    attr_accessor :id, :name, :created_at, :last_update
     
-    def initialize(room)
-      @id         = room.css('id').text
-      @room       = room.css('name').text
-      @created_at = room.css('created-at').text
+    def initialize(room_xml)
+      @id         = room_xml.css('id').text
+      @name       = room_xml.css('name').text
+      @created_at = Date.parse(room_xml.css('created-at').text)
+      
+      last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
+      @last_update = Date.parse(last_message.css('created-at').text)
+      log(:info, "Found room #{name}, created #{created_at}, updated #{last_update}.\n")
     end
-    
+
     def export(start_date, end_date)
       date = start_date
 
       while date <= end_date
-        transcript = CampfireExport::Transcript.new(id, room, date)
+        transcript = CampfireExport::Transcript.new(self, date)
         transcript.export
 
         # Ensure that we stay well below the 37signals API limits.
@@ -156,59 +162,70 @@ module CampfireExport
 
   class Transcript
     include CampfireExport::IO
-    attr_accessor :id, :room, :date
+    attr_accessor :room, :date, :messages
     
-    def initialize(id, room, date)
-      @id = id
-      @room = room
-      @date = date
+    def initialize(room, date)
+      @room     = room
+      @date     = date
+    end
+    
+    def transcript_path
+      "/room/#{room.id}/transcript/#{date.year}/#{date.mon}/#{date.mday}"
     end
     
     def export
       begin
-        transcript_path = "/room/#{id}/transcript/#{date.year}/" +
-                          "#{date.mon}/#{date.mday}"
+        log(:info, "#{export_dir} ... ")
         transcript_xml = Nokogiri::XML get("#{transcript_path}.xml").body
-        messages = transcript_xml.css('message').map do |message|
-          CampfireExport::Message.new(message)
+        
+        @messages = transcript_xml.css('message').map do |message|
+          CampfireExport::Message.new(message, room, date)
         end
-
+        
         # Only export transcripts that contain at least one message.
         if messages.length > 0
-          log(:info, "exporting transcripts")
-          FileUtils.mkdir_p directory
+          log(:info, "exporting transcripts\n")
+          FileUtils.mkdir_p export_dir
 
-          export(transcript_xml, directory, 'transcript.xml')
-          plaintext = plaintext_transcript(messages, room, date)
-          export(plaintext, directory, 'transcript.txt')
-          export_uploads(messages, directory)
-
-          begin
-            transcript_html = get(transcript_path)
-            export(transcript_html, directory, 'transcript.html')
-          rescue CampfireExport::Exception => e
-            log(:error, "HTML transcript download for #{export_dir} failed: #{e}")
-          end
+          export_file(transcript_xml, 'transcript.xml')
+          export_plaintext
+          export_html
+          export_uploads
         else
-          log(:info, "no messages")
+          log(:info, "no messages\n")
         end
       rescue CampfireExport::Exception => e
-        log(:error, "transcript download for #{export_dir} failed: #{e}")
+        log(:error, "transcript export for #{export_dir} failed: #{e}")
       end
     end
-    
-    def plaintext
-      text = "#{room}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
-      messages.each do |message|
-        text << message.to_s
+      
+    def export_plaintext
+      begin
+        plaintext = "#{room.name}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
+        messages.each {|message| plaintext << message.to_s }
+        export_file(plaintext, 'transcript.txt')
+      rescue CampfireExport::Exception => e
+        log(:error, "Plaintext transcript export for #{export_dir} failed: #{e}")
       end
-      text
+    end
+        
+    def export_html
+      begin
+        transcript_html = get(transcript_path)
+        export_file(transcript_html, 'transcript.html')
+      rescue CampfireExport::Exception => e
+        log(:error, "HTML transcript export for #{export_dir} failed: #{e}")
+      end
     end
 
     def export_uploads
       messages.each do |message|
         if message.is_upload?
-          message.upload.export(directory)
+          begin
+            message.upload.export
+          rescue CampfireExport::Exception => e
+            log(:error, "Upload export for #{message.upload.export_dir}/#{message.upload.filename} failed: #{e}")
+          end
         end
       end
     end    
@@ -216,11 +233,12 @@ module CampfireExport
   
   class Message
     include CampfireExport::IO
-    attr_accessor :id, :room_id, :body, :type, :user, :timestamp, :upload
+    attr_accessor :id, :room, :body, :type, :user, :date, :timestamp, :upload
 
-    def initialize(message)
+    def initialize(message, room, date)
       @id = message.css('id').text
-      @room_id = message.css('room-id').text
+      @room = room
+      @date = date
       @body = message.css('body').text
       @type = message.css('type').text
 
@@ -236,14 +254,18 @@ module CampfireExport
           @user = "[unknown user]"
         end
       end
-            
-      @upload = CampfireExport::Upload.new(self) if is_upload?
+      
+      begin
+        @upload = CampfireExport::Upload.new(self) if is_upload?
+      rescue e
+        log(:error, "Got an exception while making an upload: #{e}")
+      end
     end
 
-    def username(id)
-      @@usernames     ||= {}
-      @@usernames[id] ||= begin
-        doc = Nokogiri::XML get("/users/#{id}.xml").body
+    def username(user_id)
+      @@usernames          ||= {}
+      @@usernames[user_id] ||= begin
+        doc = Nokogiri::XML get("/users/#{user_id}.xml").body
         doc.css('name').text
       end
     end
@@ -303,64 +325,58 @@ module CampfireExport
   
   class Upload
     include CampfireExport::IO
-    attr_accessor :message, :id, :filename, :content
-    attr_reader :exception
+    attr_accessor :message, :room, :date, :id, :filename, :content
     
     def initialize(message)
       @message = message
+      @room = message.room
+      @date = message.date
       @deleted = false
-      
-      begin
-        # Get the upload object corresponding to this message.
-        upload_path = "/room/#{message.room_id}/messages/#{message.id}/upload.xml"
-        upload = Nokogiri::XML get(upload_path).body
-
-        # Get the upload itself and export it.
-        @id = upload.css('id').text
-        @filename = upload.css('name').text
-        
-        escaped_name = CGI.escape(filename)
-        content_path = "/room/#{message.room_id}/uploads/#{@id}/#{escaped_name}"
-        @content = get(content_path)
-      rescue Campfire::ExportException => e
-        if e.code == 404
-          # If the upload 404s, that should mean it was subsequently deleted.
-          @deleted = true
-        else
-          @exception = e
-        end
-      rescue => e
-        @exception = e
-      end
     end
     
     def deleted?
       @deleted
     end
     
-    def download_error?
-      exception != nil
+    def upload_dir
+      "uploads/#{id}"
     end
     
-    def export(export_dir)
-      # Write uploads to a subdirectory, using the upload ID as a directory
-      # name to avoid overwriting multiple uploads of the same file within
-      # the same day (for instance, if 'Picture 1.png' is uploaded twice
-      # in a day, this will preserve both copies). This path pattern also
-      # matches the tail of the upload path in the HTML transcript, making
-      # it easier to make downloads functional from the HTML transcripts.
-      upload_dir = "#{export_dir}/uploads/#{id}"
-      print "    uploads/#{id}/#{filename} ... "
-
-      if download_error?
-        log(:error, "export of #{export_dir}/#{filename} failed:\n" +
-          "#{exception.backtrace.join("\n")}")
-      elsif deleted?
-        log(:info, "deleted")
-      else
-        FileUtils.mkdir_p "#{upload_dir}"
-        export_file(content, upload_dir, filename, 'wb')
-        log(:info, "ok")
+    def export
+      begin
+        # Get the upload object corresponding to this message.
+        upload_path = "/room/#{room.id}/messages/#{message.id}/upload.xml"
+        upload = Nokogiri::XML get(upload_path).body
+        
+        # Get the upload itself and export it.
+        @id = upload.css('id').text
+        @filename = upload.css('name').text
+        escaped_name = CGI.escape(filename)
+        content_path = "/room/#{room.id}/uploads/#{id}/#{escaped_name}"
+        @content = get(content_path)
+      
+        # Write uploads to a subdirectory, using the upload ID as a directory
+        # name to avoid overwriting multiple uploads of the same file within
+        # the same day (for instance, if 'Picture 1.png' is uploaded twice
+        # in a day, this will preserve both copies). This path pattern also
+        # matches the tail of the upload path in the HTML transcript, making
+        # it easier to make downloads functional from the HTML transcripts.
+        log(:info, "#{export_dir}/#{upload_dir}/#{filename} ... ")
+        FileUtils.mkdir_p "#{export_dir}/#{upload_dir}"
+        export_file(content, "#{upload_dir}/#{filename}", 'wb')
+        log(:info, "ok\n")
+      rescue CampfireExport::Exception => e
+        log(:error, "Got an upload error: #{e.backtrace.join("\n")}")
+        if e.code == 404
+          # If the upload 404s, that should mean it was subsequently deleted.
+          @deleted = true
+          log(:info, "deleted\n")
+        else
+          raise e
+        end
+      rescue => e
+        log(:error, "export of #{export_dir}/#{upload_dir}/#{filename} failed:\n" +
+          "#{e.backtrace.join("\n")}")
       end
     end
   end
