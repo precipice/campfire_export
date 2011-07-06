@@ -53,14 +53,22 @@ module CampfireExport
       "%02d" % number
     end
 
+    # Requires that room and date be defined in the calling object.
     def export_dir
-      # Requires that room and date be defined in the calling object.
       "campfire/#{CampfireExport::Account.subdomain}/#{room.name}/" +
         "#{date.year}/#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
     end
-    
+
+    # Requires that room_name and date be defined in the calling object.    
     def export_file(content, filename, mode='w')
-      # Requires that room_name and date be defined in the calling object.
+      # Check to make sure we're writing into the target directory tree.
+      true_path = File.expand_path(File.join(export_dir, filename))
+      unless true_path.start_with?(File.expand_path(export_dir))
+        raise CampfireExport::Exception.new("#{export_dir}/#{filename}",
+          "can't export file to a directory higher than target directory " +
+          "(expected: #{File.expand_path(export_dir)}, actual: #{true_path}).")
+      end
+      
       if File.exists?("#{export_dir}/#{filename}")
         log(:error, "#{export_dir}/#{filename} failed: file already exists.")
       else
@@ -72,6 +80,19 @@ module CampfireExport
               "#{e.backtrace.join("\n")}")
           end
         end
+      end
+    end
+    
+    def verify_export(filename, expected_size)
+      full_path = "#{export_dir}/#{filename}"
+      unless File.exists?(full_path)
+        raise CampfireExport::Exception.new(full_path, 
+          "file should have been exported but does not exist")
+      end
+      unless File.size(full_path) == expected_size
+        raise CampfireExport::Exception.new(full_path, 
+          "exported file exists but is not the right size " +
+          "(expected: #{expected_size}, actual: #{File.size(full_path)})")
       end
     end
     
@@ -98,7 +119,7 @@ module CampfireExport
     end
 
     def to_s
-      "<#{resource}>: #{message}" + (" (#{code})" if code)
+      "<#{resource}>: #{message}" + (code ? " (#{code})" : "")
     end
   end
 
@@ -119,7 +140,7 @@ module CampfireExport
       CampfireExport::Account.base_url  = "https://#{subdomain}.campfirenow.com"
     end
     
-    def export(start_date, end_date)
+    def export(start_date=nil, end_date=nil)
       begin
         doc = Nokogiri::XML get('/rooms.xml').body
         doc.css('room').each do |room_xml|
@@ -143,12 +164,14 @@ module CampfireExport
       
       last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
       @last_update = Date.parse(last_message.css('created-at').text)
-      log(:info, "Found room #{name}, created #{created_at}, updated #{last_update}.\n")
     end
 
-    def export(start_date, end_date)
-      date = start_date
-
+    def export(start_date=nil, end_date=nil)
+      start_date ? date = start_date : date = created_at
+      end_date ||= last_update
+      
+      log(:info, "Exporting #{name} from #{date} to #{end_date}:\n")
+      
       while date <= end_date
         transcript = CampfireExport::Transcript.new(self, date)
         transcript.export
@@ -188,6 +211,8 @@ module CampfireExport
           FileUtils.mkdir_p export_dir
 
           export_file(transcript_xml, 'transcript.xml')
+          verify_export('transcript.xml', transcript_xml.to_s.length)
+          
           export_plaintext
           export_html
           export_uploads
@@ -204,6 +229,7 @@ module CampfireExport
         plaintext = "#{room.name}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
         messages.each {|message| plaintext << message.to_s }
         export_file(plaintext, 'transcript.txt')
+        verify_export('transcript.txt', plaintext.length)
       rescue CampfireExport::Exception => e
         log(:error, "Plaintext transcript export for #{export_dir} failed: #{e}")
       end
@@ -213,6 +239,7 @@ module CampfireExport
       begin
         transcript_html = get(transcript_path)
         export_file(transcript_html, 'transcript.html')
+        verify_export('transcript.html', transcript_html.length)
       rescue CampfireExport::Exception => e
         log(:error, "HTML transcript export for #{export_dir} failed: #{e}")
       end
@@ -325,7 +352,7 @@ module CampfireExport
   
   class Upload
     include CampfireExport::IO
-    attr_accessor :message, :room, :date, :id, :filename, :content
+    attr_accessor :message, :room, :date, :id, :filename, :content, :byte_size
     
     def initialize(message)
       @message = message
@@ -350,6 +377,7 @@ module CampfireExport
         
         # Get the upload itself and export it.
         @id = upload.css('id').text
+        @byte_size = upload.css('byte-size').text.to_i
         @filename = upload.css('name').text
         escaped_name = CGI.escape(filename)
         content_path = "/room/#{room.id}/uploads/#{id}/#{escaped_name}"
@@ -364,6 +392,7 @@ module CampfireExport
         log(:info, "#{export_dir}/#{upload_dir}/#{filename} ... ")
         FileUtils.mkdir_p "#{export_dir}/#{upload_dir}"
         export_file(content, "#{upload_dir}/#{filename}", 'wb')
+        verify_export("#{upload_dir}/#{filename}", byte_size)
         log(:info, "ok\n")
       rescue CampfireExport::Exception => e
         log(:error, "Got an upload error: #{e.backtrace.join("\n")}")
