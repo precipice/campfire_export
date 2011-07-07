@@ -26,7 +26,7 @@ Ruby 1.8.7 or later is required.
 
 First, clone the GitHub repo:
 
-    $ git clone git://github.com/precipice/campfire-export.git
+    $ git clone git://github.com/precipice/campfire_export.git
 
 If you don't already have [Bundler](http://gembundler.com/) installed, do that
 now:
