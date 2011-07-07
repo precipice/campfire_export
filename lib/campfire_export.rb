@@ -40,7 +40,8 @@ module CampfireExport
     end
 
     def get(path, params = {})
-      response = HTTParty.get(api_url(path), :query => params, :basic_auth => 
+      url = api_url(path)
+      response = HTTParty.get(url, :query => params, :basic_auth => 
         {:username => CampfireExport::Account.api_token, :password => 'X'})
 
       if response.code >= 400
@@ -169,9 +170,7 @@ module CampfireExport
     def export(start_date=nil, end_date=nil)
       start_date ? date = start_date : date = created_at
       end_date ||= last_update
-      
-      log(:info, "Exporting #{name} from #{date} to #{end_date}:\n")
-      
+            
       while date <= end_date
         transcript = CampfireExport::Transcript.new(self, date)
         transcript.export
@@ -251,7 +250,9 @@ module CampfireExport
           begin
             message.upload.export
           rescue CampfireExport::Exception => e
-            log(:error, "Upload export for #{message.upload.export_dir}/#{message.upload.filename} failed: #{e}")
+            path = "#{message.upload.export_dir}/#{message.upload.filename}"
+            log(:error, "Upload export for #{path} failed: " +
+              "#{e.backtrace.join("\n")}")
           end
         end
       end
@@ -371,6 +372,8 @@ module CampfireExport
     
     def export
       begin
+        log(:info, "    #{message.body} ... ")
+
         # Get the upload object corresponding to this message.
         upload_path = "/room/#{room.id}/messages/#{message.id}/upload.xml"
         upload = Nokogiri::XML get(upload_path).body
@@ -380,8 +383,9 @@ module CampfireExport
         @byte_size = upload.css('byte-size').text.to_i
         @filename = upload.css('name').text
         escaped_name = CGI.escape(filename)
-        content_path = "/room/#{room.id}/uploads/#{id}/#{escaped_name}"
-        @content = get(content_path)
+
+        content_path = "/room/#{room.id}/uploads/#{id}/#{escaped_name}"        
+        @content = get(content_path).body
       
         # Write uploads to a subdirectory, using the upload ID as a directory
         # name to avoid overwriting multiple uploads of the same file within
@@ -389,23 +393,22 @@ module CampfireExport
         # in a day, this will preserve both copies). This path pattern also
         # matches the tail of the upload path in the HTML transcript, making
         # it easier to make downloads functional from the HTML transcripts.
-        log(:info, "#{export_dir}/#{upload_dir}/#{filename} ... ")
         FileUtils.mkdir_p "#{export_dir}/#{upload_dir}"
         export_file(content, "#{upload_dir}/#{filename}", 'wb')
         verify_export("#{upload_dir}/#{filename}", byte_size)
         log(:info, "ok\n")
       rescue CampfireExport::Exception => e
-        log(:error, "Got an upload error: #{e.backtrace.join("\n")}")
         if e.code == 404
           # If the upload 404s, that should mean it was subsequently deleted.
           @deleted = true
           log(:info, "deleted\n")
         else
+          log(:error, "Got an upload error: #{e.backtrace.join("\n")}")
           raise e
         end
       rescue => e
         log(:error, "export of #{export_dir}/#{upload_dir}/#{filename} failed:\n" +
-          "#{e.backtrace.join("\n")}")
+          "#{e}:\n#{e.backtrace.join("\n")}")
       end
     end
   end
