@@ -18,6 +18,7 @@ repo.
 * Saves HTML, XML, and plaintext versions of chat transcripts.
 * Exports uploaded files to a day-specific subdirectory for easy access.
 * Reports and logs export errors so you know what you're missing.
+* Obsessively confirms that everything was exported correctly.
 
 ## Installing ##
 
@@ -44,18 +45,20 @@ Copy the `campfire_config-template.yaml` file from this project to
 as described in that file.
 
 The `START_DATE` and `END_DATE` variables are inclusive (that is, if your
-end date is Dec 31, 2010, a transcript for that date will be downloaded).
+end date is Dec 31, 2010, a transcript for that date will be downloaded), and
+both are optional. If they are omitted, export will run from the date each
+Campfire room was created, until the date of the last message in the room.
 
 ## Exporting ##
 
-Just run `ruby campfire_export.rb` and your transcripts will be exported into
-a `campfire` directory, with subdirectories for each site/room/year/month/day.
-In those directories, any uploaded files will be saved with their original
-filenames, prepended by the upload ID (since transcripts often have the same
-filename uploaded multiple times, e.g. `Picture 1.png`). (Note that rooms and
-uploaded files may have odd filenames -- for instance, spaces in the
-file/directory names.) Errors that happen trying to export will be logged to
-`campfire/export_errors.txt`.
+Just run `ruby bin/campfire_export.rb` and your transcripts will be exported
+into a `campfire` directory, with subdirectories for each
+site/room/year/month/day. In those directories, any uploaded files will be
+saved with their original filenames, in a directory named forthe upload ID
+(since transcripts often have the same filename uploaded multiple times, e.g.
+`Picture 1.png`). (Note that rooms and uploaded files may have odd filenames
+-- for instance, spaces in the file/directory names.) Errors that happen
+trying to export will be logged to `campfire/export_errors.txt`.
 
 The Gist I forked had a plaintext transcript export, which I preserved as
 `transcript.txt` in each directory. However, the original XML and HTML are now
@@ -78,8 +81,9 @@ Gist I forked had contributions from:
 * [Bruno Mattarollo](https://github.com/bruno)
 * [bf4](https://github.com/bf4)
 
-Also, thanks for comments and contributions:
+Also, thanks for all the help, comments and contributions:
 
+* [Jeffrey Hardy](https://github.com/packagethief)
 * [Brad Greenlee](https://github.com/bgreenlee)
 
 Thanks, all!
