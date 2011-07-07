@@ -168,9 +168,11 @@ module CampfireExport
     end
 
     def export(start_date=nil, end_date=nil)
-      start_date ? date = start_date : date = created_at
-      end_date ||= last_update
-            
+      # Figure out how to do the least amount of work while still conforming
+      # to the requester's boundary dates.
+      start_date.nil? ? date = created_at      : date = [start_date, created_at].max
+      end_date.nil?   ? end_date = last_update : end_date = [end_date, last_update].min
+      
       while date <= end_date
         transcript = CampfireExport::Transcript.new(self, date)
         transcript.export
