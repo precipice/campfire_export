@@ -2,7 +2,7 @@
 
 ## Quick Start ##
 
-    $ gem install campfire_export
+    $ sudo gem install campfire_export
     $ campfire_export
 
 ## Intro ##
@@ -18,7 +18,7 @@ I found a [Gist](https://gist.github.com) that looked pretty good:
 * [https://gist.github.com/821553](https://gist.github.com/821553)
 
 but it wasn't quite right. So this is my modification, converted to a GitHub
-repo.
+repo and a Ruby gem.
 
 ## Features ##
 
@@ -33,7 +33,7 @@ Ruby 1.8.7 or later is required.
 
 To install:
 
-    $ gem install campfire_export
+    $ sudo gem install campfire_export
 
 ## Configuring ##
 
