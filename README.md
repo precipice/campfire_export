@@ -18,7 +18,7 @@ I found a [Gist](https://gist.github.com) that looked pretty good:
 * [https://gist.github.com/821553](https://gist.github.com/821553)
 
 but it wasn't quite right. So this is my modification, converted to a GitHub
-repo and a Ruby gem.
+repo and a [Ruby gem](http://docs.rubygems.org/read/chapter/1).
 
 ## Features ##
 
@@ -29,9 +29,11 @@ repo and a Ruby gem.
 
 ## Installing ##
 
-Ruby 1.8.7 or later is required.
+[Ruby 1.8.7](http://www.ruby-lang.org/en/downloads/) or later is required.
+[RubyGems](https://rubygems.org/pages/download) is also required -- I'd
+recommend having the latest version of RubyGems installed before starting.
 
-To install:
+Once you are set up, to install, run the following:
 
     $ sudo gem install campfire_export
 
