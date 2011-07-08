@@ -1,16 +1,20 @@
 #!/usr/bin/env ruby
 
-unless Kernel.respond_to?(:require_relative)
-  module Kernel
-    def require_relative(path)
-      require File.join(File.dirname(caller[0]), path.to_str)
-    end
-  end
-end
+# unless Kernel.respond_to?(:require_relative)
+#   module Kernel
+#     def require_relative(path)
+#       require File.join(File.dirname(caller[0]), path.to_str)
+#     end
+#   end
+# end
+# 
+# require_relative '../lib/timezone'
+# require_relative '../lib/campfire_export'
 
-require_relative '../lib/timezone'
-require_relative '../lib/campfire_export'
+require 'campfire_export'
 
+# Need to do something else if the config file is missing or doesn't have
+# what we need in it.
 CONFIG = YAML.load_file(File.join(ENV['HOME'], '.campfire_export.yaml'))
 
 def parse_date(date_str)
