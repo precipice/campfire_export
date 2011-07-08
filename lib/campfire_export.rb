@@ -241,7 +241,9 @@ module CampfireExport
       
     def export_plaintext
       begin
-        plaintext = "#{room.name}: #{date.year}-#{date.mon}-#{date.mday}\n\n"
+        plaintext = "#{CampfireExport::Account.subdomain.upcase} CAMPFIRE - "
+        plaintext << "#{room.name}: " +
+          "#{date.strftime('%A, %B %e, %Y').gsub('  ', ' ')}\n\n"
         messages.each {|message| plaintext << message.to_s }
         export_file(plaintext, 'transcript.txt')
         verify_export('transcript.txt', plaintext.length)
@@ -288,7 +290,7 @@ module CampfireExport
 
       time = Time.parse message.css('created-at').text
       localtime = CampfireExport::Account.timezone.utc_to_local(time)
-      @timestamp = localtime.strftime '[%H:%M:%S]'
+      @timestamp = localtime.strftime '%I:%M %p'
 
       no_user = ['TimestampMessage', 'SystemMessage', 'AdvertisementMessage']
       unless no_user.include?(@type)
@@ -325,37 +327,37 @@ module CampfireExport
     def to_s
       case type
       when 'EnterMessage'
-        "#{timestamp} #{user} has entered the room\n"
+        "[#{user} has entered the room]\n"
       when 'KickMessage', 'LeaveMessage'
-        "#{timestamp} #{user} has left the room\n"
+        "[#{user} has left the room]\n"
       when 'TextMessage'
-        "#{timestamp} #{user}: #{body}\n"
+        "[#{user}:] #{body}\n"
       when 'UploadMessage'
-        "#{timestamp} #{user} uploaded: #{body}\n"
+        "[#{user} uploaded:] #{body}\n"
       when 'PasteMessage'
-        "#{timestamp} #{user} pasted:\n#{indent(body, 2)}"
+        "[#{user} pasted:]\n#{indent(body, 2)}\n"
       when 'TopicChangeMessage'
-        "#{timestamp} #{user} changed the topic to: #{body}\n"
+        "[#{user} changed the topic to: #{body}]\n"
       when 'ConferenceCreatedMessage'
-        "#{timestamp} #{user} created conference: #{body}\n"
+        "[#{user} created conference: #{body}]\n"
       when 'AllowGuestsMessage'
-        "#{timestamp} #{user} opened the room to guests\n"
+        "[#{user} opened the room to guests]\n"
       when 'DisallowGuestsMessage'
-        "#{timestamp} #{user} closed the room to guests\n"
+        "[#{user} closed the room to guests]\n"
       when 'LockMessage'
-        "#{timestamp} #{user} locked the room\n"
+        "[#{user} locked the room]\n"
       when 'UnlockMessage'
-        "#{timestamp} #{user} unlocked the room\n"
+        "[#{user} unlocked the room]\n"
       when 'IdleMessage'
-        "#{timestamp} #{user} became idle\n"
+        "[#{user} became idle]\n"
       when 'UnidleMessage'
-        "#{timestamp} #{user} became active\n"
+        "[#{user} became active]\n"
       when 'TweetMessage'
-        "#{timestamp} #{user} tweeted: #{body}\n"
+        "[#{user} tweeted:] #{body}\n"
       when 'SoundMessage'
-        "#{timestamp} #{user} played a sound: #{body}\n"
+        "[#{user} played a sound:] #{body}\n"
       when 'TimestampMessage'
-        ""
+        "--- #{timestamp} ---\n"
       when 'SystemMessage'
         ""
       when 'AdvertisementMessage'
