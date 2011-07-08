@@ -1,5 +1,7 @@
 # Ruby on Rails is released under the MIT license.
 
+require 'rubygems'
+
 require 'tzinfo'
 
 module CampfireExport
