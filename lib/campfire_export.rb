@@ -97,13 +97,14 @@ module CampfireExport
     def log(level, message, exception=nil)
       case level
       when :error
-        $stderr.puts ["*** Error: #{message}", exception].compact.join(": ")
+        short_error = ["*** Error: #{message}", exception].compact.join(": ")
+        $stderr.puts short_error
         open("campfire/export_errors.txt", 'a') do |log|
-          log.write("*** Error: #{message}")
+          log.write short_error
           unless exception.nil?
-            log.write(%Q{ #{exception}:\n\t#{exception.backtrace.join("\n\t")}}) 
+            log.write %Q{\n\t#{exception.backtrace.join("\n\t")}}
           end
-          log.write("\n")
+          log.write "\n"
         end
       else
         print message
