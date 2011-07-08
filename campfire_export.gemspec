@@ -8,11 +8,13 @@ Gem::Specification.new do |s|
   s.platform    = Gem::Platform::RUBY
   s.authors     = ["Marc Hedlund"]
   s.email       = ["marc@precipice.org"]
+  s.license     = "Apache 2.0"
   s.homepage    = "https://github.com/precipice/campfire_export"
   s.summary     = %q{Export transcripts and uploaded files from your 37signals' Campfire account.}
   s.description = s.summary
 
   s.rubyforge_project = "campfire_export"
+  s.required_ruby_version = '>= 1.8.7'
   
   s.add_development_dependency "bundler",  "~> 1.0.15"
   s.add_development_dependency "tzinfo",   "~> 0.3.29"
