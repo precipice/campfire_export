@@ -31,6 +31,7 @@ require 'find'
 require 'httparty'
 require 'nokogiri'
 require 'time'
+require 'tzinfo'
 require 'yaml'
 
 module CampfireExport
@@ -126,19 +127,29 @@ module CampfireExport
 
   class Account
     include CampfireExport::IO
+    include CampfireExport::TimeZone
     
     @subdomain = ""
     @api_token = ""
     @base_url  = ""
+    @timezone  = ""
     
     class << self
-      attr_accessor :subdomain, :api_token, :base_url
+      attr_accessor :subdomain, :api_token, :base_url, :timezone
     end
     
     def initialize(subdomain, api_token)
       CampfireExport::Account.subdomain = subdomain
       CampfireExport::Account.api_token = api_token
       CampfireExport::Account.base_url  = "https://#{subdomain}.campfirenow.com"
+      CampfireExport::Account.timezone  = parse_timezone
+    end
+    
+    def parse_timezone
+      settings_html = Nokogiri::HTML get('/account/settings').body
+      selected_zone = settings_html.css('select[id="account_time_zone_id"] ' +
+                                        '> option[selected="selected"]')
+      find_tzinfo(selected_zone.attribute("value").text)
     end
     
     def export(start_date=nil, end_date=nil)
@@ -159,12 +170,16 @@ module CampfireExport
     attr_accessor :id, :name, :created_at, :last_update
     
     def initialize(room_xml)
-      @id         = room_xml.css('id').text
-      @name       = room_xml.css('name').text
-      @created_at = Date.parse(room_xml.css('created-at').text)
-      
+      @id          = room_xml.css('id').text
+      @name        = room_xml.css('name').text
+
+      created_utc  = DateTime.parse(room_xml.css('created-at').text)
+      @created_at  = CampfireExport::Account.timezone.utc_to_local(created_utc)
+
       last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
-      @last_update = Date.parse(last_message.css('created-at').text)
+      update_utc   = DateTime.parse(last_message.css('created-at').text)
+      @last_update = CampfireExport::Account.timezone.utc_to_local(update_utc)
+      
     end
 
     def export(start_date=nil, end_date=nil)
@@ -272,9 +287,9 @@ module CampfireExport
       @body = message.css('body').text
       @type = message.css('type').text
 
-      # FIXME: I imagine this needs to account for time zone.
       time = Time.parse message.css('created-at').text
-      @timestamp = time.strftime '[%H:%M:%S]'
+      localtime = CampfireExport::Account.timezone.utc_to_local(time)
+      @timestamp = localtime.strftime '[%H:%M:%S]'
 
       no_user = ['TimestampMessage', 'SystemMessage', 'AdvertisementMessage']
       unless no_user.include?(@type)
