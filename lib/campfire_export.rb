@@ -268,10 +268,16 @@ module CampfireExport
     def export_html
       begin
         transcript_html = get(transcript_path)
-        # Make the upload links in the transcript clickable for the exported 
+
+        # Make the upload links in the transcript clickable from the exported 
         # directory layout.
-        transcript_html.gsub!(%Q{<a href="/room/#{room.id}/uploads/},
-                              %Q{<a href="uploads/})
+        transcript_html.gsub!(%Q{href="/room/#{room.id}/uploads/},
+                              %Q{href="uploads/})
+        # Likewise, make the image thumbnails embeddable from the exported
+        # directory layout.
+        transcript_html.gsub!(%Q{src="/room/#{room.id}/thumb/},
+                              %Q{src="thumbs/})
+        
         export_file(transcript_html, 'transcript.html')
         verify_export('transcript.html', transcript_html.length)
       rescue => e
@@ -382,7 +388,7 @@ module CampfireExport
   
   class Upload
     include CampfireExport::IO
-    attr_accessor :message, :room, :date, :id, :filename, :content, :byte_size
+    attr_accessor :message, :room, :date, :id, :filename, :content_type, :byte_size
     
     def initialize(message)
       @message = message
@@ -395,8 +401,17 @@ module CampfireExport
       @deleted
     end
     
+    def is_image?
+      content_type.start_with?("image/")
+    end
+    
     def upload_dir
       "uploads/#{id}"
+    end
+    
+    # Image thumbnails are used to inline image uploads in HTML transcripts.
+    def thumb_dir
+      "thumbs/#{id}"
     end
     
     def export
@@ -410,21 +425,12 @@ module CampfireExport
         # Get the upload itself and export it.
         @id = upload.css('id').text
         @byte_size = upload.css('byte-size').text.to_i
+        @content_type = upload.css('content-type').text
         @filename = upload.css('name').text
-        escaped_name = CGI.escape(filename)
 
-        content_path = "/room/#{room.id}/uploads/#{id}/#{escaped_name}"        
-        @content = get(content_path).body
-      
-        # Write uploads to a subdirectory, using the upload ID as a directory
-        # name to avoid overwriting multiple uploads of the same file within
-        # the same day (for instance, if 'Picture 1.png' is uploaded twice
-        # in a day, this will preserve both copies). This path pattern also
-        # matches the tail of the upload path in the HTML transcript, making
-        # it easier to make downloads functional from the HTML transcripts.
-        FileUtils.mkdir_p "#{export_dir}/#{upload_dir}"
-        export_file(content, "#{upload_dir}/#{filename}", 'wb')
-        verify_export("#{upload_dir}/#{filename}", byte_size)
+        export_content(upload_dir)
+        export_content(thumb_dir, path_dir="thumb/#{id}", verify=false) if is_image?
+                
         log(:info, "ok\n")
       rescue CampfireExport::Exception => e
         if e.code == 404
@@ -435,6 +441,23 @@ module CampfireExport
           raise e
         end
       end
+    end
+    
+    def export_content(content_dir, path_dir=nil, verify=true)
+      # Hack to rename the thumb directory 'thumbs' on disk.
+      path_dir ||= content_dir
+      
+      # Write uploads to a subdirectory, using the upload ID as a directory
+      # name to avoid overwriting multiple uploads of the same file within
+      # the same day (for instance, if 'Picture 1.png' is uploaded twice
+      # in a day, this will preserve both copies). This path pattern also
+      # matches the tail of the upload path in the HTML transcript, making
+      # it easier to make downloads functional from the HTML transcripts.
+      content_path = "/room/#{room.id}/#{path_dir}/#{CGI.escape(filename)}"        
+      content = get(content_path).body
+      FileUtils.mkdir_p(File.join(export_dir, content_dir))
+      export_file(content, "#{content_dir}/#{filename}", 'wb')
+      verify_export("#{content_dir}/#{filename}", byte_size) if verify
     end
   end
 end
