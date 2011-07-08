@@ -51,10 +51,14 @@ module CampfireExport
     def zero_pad(number)
       "%02d" % number
     end
-
+    
+    def account_dir
+      "campfire/#{CampfireExport::Account.subdomain}"
+    end
+    
     # Requires that room and date be defined in the calling object.
     def export_dir
-      "campfire/#{CampfireExport::Account.subdomain}/#{room.name}/" +
+      "#{account_dir}/#{room.name}/" +
         "#{date.year}/#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
     end
 
@@ -69,7 +73,7 @@ module CampfireExport
       end
       
       if File.exists?("#{export_dir}/#{filename}")
-        log(:error, "#{export_dir}/#{filename} failed: file already exists.")
+        log(:error, "#{export_dir}/#{filename} failed: file already exists")
       else
         open("#{export_dir}/#{filename}", mode) do |file|
           file.write content
@@ -90,12 +94,16 @@ module CampfireExport
       end
     end
     
-    def log(level, message)
+    def log(level, message, exception=nil)
       case level
       when :error
-        $stderr.puts "*** Error: #{message}"
+        $stderr.puts ["*** Error: #{message}", exception].compact.join(": ")
         open("campfire/export_errors.txt", 'a') do |log|
-          log.write "#{message}\n"
+          log.write("*** Error: #{message}")
+          unless exception.nil?
+            log.write(%Q{ #{exception}:\n\t#{exception.backtrace.join("\n\t")}}) 
+          end
+          log.write("\n")
         end
       else
         print message
@@ -134,6 +142,10 @@ module CampfireExport
       CampfireExport::Account.subdomain = subdomain
       CampfireExport::Account.api_token = api_token
       CampfireExport::Account.base_url  = "https://#{subdomain}.campfirenow.com"
+      
+      # Make the base directory immediately so we can start logging errors.
+      FileUtils.mkdir_p account_dir
+      
       CampfireExport::Account.timezone  = parse_timezone
     end
     
@@ -144,7 +156,7 @@ module CampfireExport
                                           '> option[selected="selected"]')
         find_tzinfo(selected_zone.attribute("value").text)
       rescue => e
-        log(:error, "couldn't find timezone setting (using GMT): #{e}")
+        log(:error, "couldn't find timezone setting (using GMT instead)", e)
         find_tzinfo("Etc/GMT")
       end
     end
@@ -157,7 +169,7 @@ module CampfireExport
           room.export(start_date, end_date)
         end
       rescue => e
-        log(:error, "room list download failed: #{e}")
+        log(:error, "room list download failed", e)
       end
     end
   end
@@ -178,7 +190,7 @@ module CampfireExport
         update_utc   = DateTime.parse(last_message.css('created-at').text)
         @last_update = CampfireExport::Account.timezone.utc_to_local(update_utc)
       rescue => e
-        log(:error, "couldn't get last update in #{room} (defaulting to today): #{e}")
+        log(:error, "couldn't get last update in #{room} (defaulting to today)", e)
         @last_update = Time.now
       end
     end
@@ -218,7 +230,7 @@ module CampfireExport
         log(:info, "#{export_dir} ... ")
         @xml = Nokogiri::XML get("#{transcript_path}.xml").body      
       rescue CampfireExport::Exception => e
-        log(:error, "transcript export for #{export_dir} failed: #{e}")
+        log(:error, "transcript export for #{export_dir} failed", e)
       else
         @messages = xml.css('message').map do |message|
           CampfireExport::Message.new(message, room, date)
@@ -230,7 +242,7 @@ module CampfireExport
           begin
             FileUtils.mkdir_p export_dir
           rescue => e
-            log(:error, "Unable to create #{export_dir}: #{e}")
+            log(:error, "Unable to create #{export_dir}", e)
           else
             export_xml
             export_plaintext
@@ -248,7 +260,7 @@ module CampfireExport
         export_file(xml, 'transcript.xml')
         verify_export('transcript.xml', xml.to_s.length)
       rescue => e
-        log(:error, "XML transcript export for #{export_dir} failed: #{e}")
+        log(:error, "XML transcript export for #{export_dir} failed", e)
       end
     end
 
@@ -261,7 +273,7 @@ module CampfireExport
         export_file(plaintext, 'transcript.txt')
         verify_export('transcript.txt', plaintext.length)
       rescue => e
-        log(:error, "Plaintext transcript export for #{export_dir} failed: #{e}")
+        log(:error, "Plaintext transcript export for #{export_dir} failed", e)
       end
     end
         
@@ -281,7 +293,7 @@ module CampfireExport
         export_file(transcript_html, 'transcript.html')
         verify_export('transcript.html', transcript_html.length)
       rescue => e
-        log(:error, "HTML transcript export for #{export_dir} failed: #{e}")
+        log(:error, "HTML transcript export for #{export_dir} failed", e)
       end
     end
 
@@ -292,7 +304,7 @@ module CampfireExport
             message.upload.export
           rescue => e
             path = "#{message.upload.export_dir}/#{message.upload.filename}"
-            log(:error, "Upload export for #{path} failed: #{e}")
+            log(:error, "Upload export for #{path} failed", e)
           end
         end
       end
