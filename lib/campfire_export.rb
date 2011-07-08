@@ -19,15 +19,13 @@
 #
 # Since Campfire (www.campfirenow.com) doesn't provide an export feature,
 # this script implements one via the Campfire API.
-#
-# Configure the script below with your Campfire account details, or it will
-# not run.
 
 require 'rubygems'
 
+require 'campfire_export/timezone'
+
 require 'cgi'
 require 'fileutils'
-require 'find'
 require 'httparty'
 require 'nokogiri'
 require 'time'
@@ -241,7 +239,7 @@ module CampfireExport
       
     def export_plaintext
       begin
-        plaintext = "#{CampfireExport::Account.subdomain.upcase} CAMPFIRE - "
+        plaintext = "#{CampfireExport::Account.subdomain.upcase} CAMPFIRE\n"
         plaintext << "#{room.name}: " +
           "#{date.strftime('%A, %B %e, %Y').gsub('  ', ' ')}\n\n"
         messages.each {|message| plaintext << message.to_s }

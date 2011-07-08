@@ -1,4 +1,11 @@
-# campfire-export #
+# campfire_export #
+
+## Quick Start ##
+
+    $ gem install campfire_export
+    $ campfire_export
+
+## Intro ##
 
 I had an old, defunct [Campfire](http://campfirenow.com/) account with five
 years' worth of transcripts in it, some of them hilarious, others just 
@@ -24,26 +31,17 @@ repo.
 
 Ruby 1.8.7 or later is required.
 
-First, clone the GitHub repo:
+To install:
 
-    $ git clone git://github.com/precipice/campfire_export.git
-
-If you don't already have [Bundler](http://gembundler.com/) installed, do that
-now:
-
-    $ gem install bundler
-
-Then install required gems via Bundler:
-
-    $ bundle install
+    $ gem install campfire_export
 
 ## Configuring ##
 
-There are a number of configuration variables required to run the export.
-Create the `.campfire_export.yaml` file in your home directory using this
-template:
-
-    # Campfire export configuration -- all options are required.
+There are a number of configuration variables required to run the export. The
+export script will prompt you for these; just run it and away you go. If you
+want to run the script repeatedly or want to control the start and end date of
+the export, you can create a `.campfire_export.yaml` file in your home
+directory using this template:
 
     # Your Campfire subdomain (for 'https://myco.campfirenow.com', use 'myco').
     subdomain:  example
@@ -66,8 +64,8 @@ Campfire room was created, until the date of the last message in that room.
 
 ## Exporting ##
 
-Just run `ruby bin/campfire_export` and your transcripts will be exported into
-a `campfire` directory in the current directory, with subdirectories for each
+Just run `campfire_export` and your transcripts will be exported into a
+`campfire` directory in the current directory, with subdirectories for each
 site/room/year/month/day. In those directories, any uploaded files will be
 saved with their original filenames, in a directory named for the upload ID
 (since transcripts often have the same filename uploaded multiple times, e.g.
@@ -75,18 +73,12 @@ saved with their original filenames, in a directory named for the upload ID
 -- for instance, spaces in the file/directory names.) Errors that happen
 trying to export will be logged to `campfire/export_errors.txt`.
 
-The Gist I forked had a plaintext transcript export, which I preserved as
+The Gist I forked had a plaintext transcript export, which I've kept in as
 `transcript.txt` in each directory. However, the original XML and HTML are now
 also saved as `transcript.xml` and `transcript.html`, which could be useful.
 
 Days which have no messages posted will be ignored, so the resulting directory
 structure will be sparse (no messages == no directory).
-
-## Limitations ##
-
-* Room name changes are not noticed.
-* Slow as all hell if you have file uploads.
-* HTML transcripts are not yet clickable for accessing uploads.
 
 ## Credit ##
 
@@ -97,7 +89,7 @@ Gist I forked had contributions from:
 * [Bruno Mattarollo](https://github.com/bruno)
 * [bf4](https://github.com/bf4)
 
-Also, thanks for all the help, comments and contributions:
+Also, thanks much for all the help, comments and contributions:
 
 * [Jeffrey Hardy](https://github.com/packagethief)
 * [Brad Greenlee](https://github.com/bgreenlee)

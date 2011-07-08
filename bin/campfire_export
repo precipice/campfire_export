@@ -1,26 +1,57 @@
 #!/usr/bin/env ruby
 
-# unless Kernel.respond_to?(:require_relative)
-#   module Kernel
-#     def require_relative(path)
-#       require File.join(File.dirname(caller[0]), path.to_str)
-#     end
-#   end
-# end
-# 
-# require_relative '../lib/timezone'
-# require_relative '../lib/campfire_export'
+# Copyright 2011 Marc Hedlund <marc@precipice.org>
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# campfire_export -- export Campfire transcripts and uploaded files.
+#
+# Since Campfire (www.campfirenow.com) doesn't provide an export feature,
+# this script implements one via the Campfire API.
+#
+# See https://github.com/precipice/campfire_export/blob/master/README.md
+# for more information on using this script.
+
+lib = File.expand_path(File.join(File.dirname(__FILE__), '../lib'))
+$LOAD_PATH.unshift(lib) if File.directory?(lib) && !$LOAD_PATH.include?(lib)
 
 require 'campfire_export'
 
-# Need to do something else if the config file is missing or doesn't have
-# what we need in it.
-CONFIG = YAML.load_file(File.join(ENV['HOME'], '.campfire_export.yaml'))
-
-def parse_date(date_str)
+def config_date(config, date_key)
+  date_str = config.fetch(date_key, nil)
   date_str.nil? ? nil : Date.parse(date_str)
 end
 
-account = CampfireExport::Account.new(CONFIG['subdomain'], CONFIG['api_token'])
-account.export(parse_date(CONFIG.fetch('start_date', nil)), 
-               parse_date(CONFIG.fetch('end_date', nil)))
+def ensure_config_for(config, key, prompt)
+  value = config.fetch(key, "")
+  while value == ""
+    print "#{prompt}: "
+    value = gets.chomp
+  end
+  config[key] = value
+end
+
+config = {}
+config_file = File.join(ENV['HOME'], '.campfire_export.yaml')
+
+if File.exists?(config_file) and File.readable?(config_file)
+  config = YAML.load_file(config_file)  
+end
+
+ensure_config_for(config, 'subdomain', 
+  "Your Campfire subdomain (for 'https://myco.campfirenow.com', use 'myco')")
+ensure_config_for(config, 'api_token',
+  "Your Campfire API token (see 'My Info' on your Campfire site)")
+
+account = CampfireExport::Account.new(config['subdomain'], config['api_token'])
+account.export(config_date(config, 'start_date'), config_date(config, 'end_date'))
