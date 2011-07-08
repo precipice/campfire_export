@@ -255,6 +255,10 @@ module CampfireExport
     def export_html
       begin
         transcript_html = get(transcript_path)
+        # Make the upload links in the transcript clickable for the exported 
+        # directory layout.
+        transcript_html.gsub!(%Q{<a href="/room/#{room.id}/uploads/},
+                              %Q{<a href="uploads/})
         export_file(transcript_html, 'transcript.html')
         verify_export('transcript.html', transcript_html.length)
       rescue CampfireExport::Exception => e
