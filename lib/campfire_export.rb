@@ -72,12 +72,7 @@ module CampfireExport
         log(:error, "#{export_dir}/#{filename} failed: file already exists.")
       else
         open("#{export_dir}/#{filename}", mode) do |file|
-          begin
-            file.write content
-          rescue => e
-            log(:error, "#{export_dir}/#{filename} failed: " +
-              "#{e.backtrace.join("\n")}")
-          end
+          file.write content
         end
       end
     end
@@ -86,7 +81,7 @@ module CampfireExport
       full_path = "#{export_dir}/#{filename}"
       unless File.exists?(full_path)
         raise CampfireExport::Exception.new(full_path, 
-          "file should have been exported but does not exist")
+          "file should have been exported but did not make it to disk")
       end
       unless File.size(full_path) == expected_size
         raise CampfireExport::Exception.new(full_path, 
@@ -98,13 +93,13 @@ module CampfireExport
     def log(level, message)
       case level
       when :error
-        puts "*** Error: #{message}"
+        $stderr.puts "*** Error: #{message}"
         open("campfire/export_errors.txt", 'a') do |log|
           log.write "#{message}\n"
         end
       else
         print message
-        STDOUT.flush
+        $stdout.flush
       end
     end
   end
@@ -143,10 +138,15 @@ module CampfireExport
     end
     
     def parse_timezone
-      settings_html = Nokogiri::HTML get('/account/settings').body
-      selected_zone = settings_html.css('select[id="account_time_zone_id"] ' +
-                                        '> option[selected="selected"]')
-      find_tzinfo(selected_zone.attribute("value").text)
+      begin
+        settings_html = Nokogiri::HTML get('/account/settings').body
+        selected_zone = settings_html.css('select[id="account_time_zone_id"] ' +
+                                          '> option[selected="selected"]')
+        find_tzinfo(selected_zone.attribute("value").text)
+      rescue => e
+        log(:error, "couldn't find timezone setting (using GMT): #{e}")
+        find_tzinfo("Etc/GMT")
+      end
     end
     
     def export(start_date=nil, end_date=nil)
@@ -156,7 +156,7 @@ module CampfireExport
           room = CampfireExport::Room.new(room_xml)
           room.export(start_date, end_date)
         end
-      rescue CampfireExport::Exception => e
+      rescue => e
         log(:error, "room list download failed: #{e}")
       end
     end
@@ -173,10 +173,14 @@ module CampfireExport
       created_utc  = DateTime.parse(room_xml.css('created-at').text)
       @created_at  = CampfireExport::Account.timezone.utc_to_local(created_utc)
 
-      last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
-      update_utc   = DateTime.parse(last_message.css('created-at').text)
-      @last_update = CampfireExport::Account.timezone.utc_to_local(update_utc)
-      
+      begin
+        last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
+        update_utc   = DateTime.parse(last_message.css('created-at').text)
+        @last_update = CampfireExport::Account.timezone.utc_to_local(update_utc)
+      rescue => e
+        log(:error, "couldn't get last update in #{room} (defaulting to today): #{e}")
+        @last_update = Time.now
+      end
     end
 
     def export(start_date=nil, end_date=nil)
@@ -198,7 +202,7 @@ module CampfireExport
 
   class Transcript
     include CampfireExport::IO
-    attr_accessor :room, :date, :messages
+    attr_accessor :room, :date, :xml, :messages
     
     def initialize(room, date)
       @room     = room
@@ -212,40 +216,51 @@ module CampfireExport
     def export
       begin
         log(:info, "#{export_dir} ... ")
-        transcript_xml = Nokogiri::XML get("#{transcript_path}.xml").body
-        
-        @messages = transcript_xml.css('message').map do |message|
+        @xml = Nokogiri::XML get("#{transcript_path}.xml").body      
+      rescue CampfireExport::Exception => e
+        log(:error, "transcript export for #{export_dir} failed: #{e}")
+      else
+        @messages = xml.css('message').map do |message|
           CampfireExport::Message.new(message, room, date)
         end
-        
+      
         # Only export transcripts that contain at least one message.
         if messages.length > 0
           log(:info, "exporting transcripts\n")
-          FileUtils.mkdir_p export_dir
-
-          export_file(transcript_xml, 'transcript.xml')
-          verify_export('transcript.xml', transcript_xml.to_s.length)
-          
-          export_plaintext
-          export_html
-          export_uploads
+          begin
+            FileUtils.mkdir_p export_dir
+          rescue => e
+            log(:error, "Unable to create #{export_dir}: #{e}")
+          else
+            export_xml
+            export_plaintext
+            export_html
+            export_uploads
+          end
         else
           log(:info, "no messages\n")
-        end
-      rescue CampfireExport::Exception => e
-        log(:error, "transcript export for #{export_dir} failed: #{e}")
+        end      
       end
     end
-      
+    
+    def export_xml
+      begin
+        export_file(xml, 'transcript.xml')
+        verify_export('transcript.xml', xml.to_s.length)
+      rescue => e
+        log(:error, "XML transcript export for #{export_dir} failed: #{e}")
+      end
+    end
+
     def export_plaintext
       begin
+        date_header = date.strftime('%A, %B %e, %Y').gsub('  ', ' ')
         plaintext = "#{CampfireExport::Account.subdomain.upcase} CAMPFIRE\n"
-        plaintext << "#{room.name}: " +
-          "#{date.strftime('%A, %B %e, %Y').gsub('  ', ' ')}\n\n"
+        plaintext << "#{room.name}: #{date_header}\n\n"
         messages.each {|message| plaintext << message.to_s }
         export_file(plaintext, 'transcript.txt')
         verify_export('transcript.txt', plaintext.length)
-      rescue CampfireExport::Exception => e
+      rescue => e
         log(:error, "Plaintext transcript export for #{export_dir} failed: #{e}")
       end
     end
@@ -259,7 +274,7 @@ module CampfireExport
                               %Q{<a href="uploads/})
         export_file(transcript_html, 'transcript.html')
         verify_export('transcript.html', transcript_html.length)
-      rescue CampfireExport::Exception => e
+      rescue => e
         log(:error, "HTML transcript export for #{export_dir} failed: #{e}")
       end
     end
@@ -269,10 +284,9 @@ module CampfireExport
         if message.is_upload?
           begin
             message.upload.export
-          rescue CampfireExport::Exception => e
+          rescue => e
             path = "#{message.upload.export_dir}/#{message.upload.filename}"
-            log(:error, "Upload export for #{path} failed: " +
-              "#{e.backtrace.join("\n")}")
+            log(:error, "Upload export for #{path} failed: #{e}")
           end
         end
       end
@@ -296,24 +310,19 @@ module CampfireExport
 
       no_user = ['TimestampMessage', 'SystemMessage', 'AdvertisementMessage']
       unless no_user.include?(@type)
-        begin
-          @user = username(message.css('user-id').text)
-        rescue CampfireExport::Exception
-          @user = "[unknown user]"
-        end
+        @user = username(message.css('user-id').text)
       end
       
-      begin
-        @upload = CampfireExport::Upload.new(self) if is_upload?
-      rescue e
-        log(:error, "Got an exception while making an upload: #{e}")
-      end
+      @upload = CampfireExport::Upload.new(self) if is_upload?
     end
 
     def username(user_id)
       @@usernames          ||= {}
       @@usernames[user_id] ||= begin
         doc = Nokogiri::XML get("/users/#{user_id}.xml").body
+      rescue
+        "[unknown user]"
+      else
         doc.css('name').text
       end
     end
@@ -423,12 +432,8 @@ module CampfireExport
           @deleted = true
           log(:info, "deleted\n")
         else
-          log(:error, "Got an upload error: #{e.backtrace.join("\n")}")
           raise e
         end
-      rescue => e
-        log(:error, "export of #{export_dir}/#{upload_dir}/#{filename} failed:\n" +
-          "#{e}:\n#{e.backtrace.join("\n")}")
       end
     end
   end
