@@ -44,7 +44,7 @@ the export, you can create a `.campfire_export.yaml` file in your home
 directory using this template:
 
     # Your Campfire subdomain (for 'https://myco.campfirenow.com', use 'myco').
-    subdomain:  example
+    subdomain:  myco
 
     # Your Campfire API token (see "My Info" on your Campfire site).
     api_token:  abababababababababababababababababababab
@@ -82,17 +82,23 @@ structure will be sparse (no messages == no directory).
 
 ## Credit ##
 
+First, thanks a ton to [Jeffrey Hardy](https://github.com/packagethief) from
+37signals, who helped me track down some bugs in my code as well as some
+confusion in what I was getting back from Campfire. His patient and determined
+help made it possible to get this working. Thanks, Jeff!
+
+Also, thanks much for all the help, comments and contributions:
+
+* [Brad Greenlee](https://github.com/bgreenlee)
+* [Andre Arko](https://github.com/indirect)
+* [Brian Donovan](https://github.com/eventualbuddha)
+
 As mentioned above, some of the work on this was done by other people. The
 Gist I forked had contributions from:
 
 * [Pat Allan](https://github.com/freelancing-god)
 * [Bruno Mattarollo](https://github.com/bruno)
 * [bf4](https://github.com/bf4)
-
-Also, thanks much for all the help, comments and contributions:
-
-* [Jeffrey Hardy](https://github.com/packagethief)
-* [Brad Greenlee](https://github.com/bgreenlee)
 
 Thanks, all!
 
