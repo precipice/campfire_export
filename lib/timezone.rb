@@ -1,9 +1,14 @@
+# Ruby on Rails is released under the MIT license.
+
+require 'tzinfo'
+
 module CampfireExport
   # This is a total cut & paste from:
   # https://github.com/rails/rails/blob/master/activesupport/lib/active_support/values/time_zone.rb
   # I'm copying it here to avoid bugs in the current active_support gem, to
   # avoid having a dependency on active_support that might freak out Rails
-  # users, and to avoid fighting with RubyGems about threads. See for background:
+  # users, and to avoid fighting with RubyGems about threads and deprecation. 
+  # See for background:
   # https://github.com/rails/rails/pull/1215
   # http://stackoverflow.com/questions/5176782/uninitialized-constant-activesupportdependenciesmutex-nameerror
   module TimeZone

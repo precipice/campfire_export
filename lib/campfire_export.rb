@@ -31,7 +31,6 @@ require 'find'
 require 'httparty'
 require 'nokogiri'
 require 'time'
-require 'tzinfo'
 require 'yaml'
 
 module CampfireExport
