@@ -11,7 +11,7 @@ end
 require_relative '../lib/timezone'
 require_relative '../lib/campfire_export'
 
-CONFIG = YAML.load_file(File.join(ENV['HOME'], '.campfire_config.yaml'))
+CONFIG = YAML.load_file(File.join(ENV['HOME'], '.campfire_export.yaml'))
 
 def parse_date(date_str)
   date_str.nil? ? nil : Date.parse(date_str)

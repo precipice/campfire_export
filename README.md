@@ -40,21 +40,36 @@ Then install required gems via Bundler:
 ## Configuring ##
 
 There are a number of configuration variables required to run the export.
-Copy the `campfire_config-template.yaml` file from this project to 
-`.campfire_config.yaml` in your home directory, and then modify it
-as described in that file.
+Create the `.campfire_export.yaml` file in your home directory using this
+template:
 
-The `START_DATE` and `END_DATE` variables are inclusive (that is, if your
+    # Campfire export configuration -- all options are required.
+
+    # Your Campfire subdomain (for 'https://myco.campfirenow.com', use 'myco').
+    subdomain:  example
+
+    # Your Campfire API token (see "My Info" on your Campfire site).
+    api_token:  abababababababababababababababababababab
+
+    # OPTIONAL: Export start date - the first transcript you want exported.
+    # Uncomment to set. Defaults to the date each room was created.
+    #start_date: 2010/1/1
+
+    # OPTIONAL: Export end date - the last transcript you want exported.
+    # Uncomment to set. Defaults to the date of the last comment in each room.
+    #end_date:   2010/12/31
+
+The `start_date` and `end_date` variables are inclusive (that is, if your
 end date is Dec 31, 2010, a transcript for that date will be downloaded), and
 both are optional. If they are omitted, export will run from the date each
-Campfire room was created, until the date of the last message in the room.
+Campfire room was created, until the date of the last message in that room.
 
 ## Exporting ##
 
-Just run `ruby bin/campfire_export.rb` and your transcripts will be exported
-into a `campfire` directory, with subdirectories for each
+Just run `ruby bin/campfire_export` and your transcripts will be exported into
+a `campfire` directory in the current directory, with subdirectories for each
 site/room/year/month/day. In those directories, any uploaded files will be
-saved with their original filenames, in a directory named forthe upload ID
+saved with their original filenames, in a directory named for the upload ID
 (since transcripts often have the same filename uploaded multiple times, e.g.
 `Picture 1.png`). (Note that rooms and uploaded files may have odd filenames
 -- for instance, spaces in the file/directory names.) Errors that happen
@@ -71,10 +86,11 @@ structure will be sparse (no messages == no directory).
 
 * Room name changes are not noticed.
 * Slow as all hell if you have file uploads.
+* HTML transcripts are not yet clickable for accessing uploads.
 
 ## Credit ##
 
-As mentioned above, much of the work on this was done by other people. The
+As mentioned above, some of the work on this was done by other people. The
 Gist I forked had contributions from:
 
 * [Pat Allan](https://github.com/freelancing-god)
