@@ -68,8 +68,8 @@ module CampfireExport
       true_path = File.expand_path(File.join(export_dir, filename))
       unless true_path.start_with?(File.expand_path(export_dir))
         raise CampfireExport::Exception.new("#{export_dir}/#{filename}",
-          "can't export file to a directory higher than target directory " +
-          "(expected: #{File.expand_path(export_dir)}, actual: #{true_path}).")
+          "can't export file to a directory higher than target directory; " +
+          "expected: #{File.expand_path(export_dir)}, actual: #{true_path}.")
       end
       
       if File.exists?("#{export_dir}/#{filename}")
@@ -267,7 +267,7 @@ module CampfireExport
 
     def export_plaintext
       begin
-        date_header = date.strftime('%A, %B %e, %Y').gsub('  ', ' ')
+        date_header = date.strftime('%A, %B %e, %Y').squeeze(" ")
         plaintext = "#{CampfireExport::Account.subdomain.upcase} CAMPFIRE\n"
         plaintext << "#{room.name}: #{date_header}\n\n"
         messages.each {|message| plaintext << message.to_s }
@@ -442,7 +442,7 @@ module CampfireExport
         @filename = upload.css('name').text
 
         export_content(upload_dir)
-        export_content(thumb_dir, path_dir="thumb/#{id}", verify=false) if is_image?
+        export_content(thumb_dir, path_component="thumb/#{id}", verify=false) if is_image?
                 
         log(:info, "ok\n")
       rescue CampfireExport::Exception => e
@@ -456,9 +456,10 @@ module CampfireExport
       end
     end
     
-    def export_content(content_dir, path_dir=nil, verify=true)
-      # Hack to rename the thumb directory 'thumbs' on disk.
-      path_dir ||= content_dir
+    def export_content(content_dir, path_component=nil, verify=true)
+      # If the export directory name is different than the URL path component,
+      # the caller can define the path_component separately.
+      path_component ||= content_dir
       
       # Write uploads to a subdirectory, using the upload ID as a directory
       # name to avoid overwriting multiple uploads of the same file within
@@ -466,7 +467,7 @@ module CampfireExport
       # in a day, this will preserve both copies). This path pattern also
       # matches the tail of the upload path in the HTML transcript, making
       # it easier to make downloads functional from the HTML transcripts.
-      content_path = "/room/#{room.id}/#{path_dir}/#{CGI.escape(filename)}"        
+      content_path = "/room/#{room.id}/#{path_component}/#{CGI.escape(filename)}"        
       content = get(content_path).body
       FileUtils.mkdir_p(File.join(export_dir, content_dir))
       export_file(content, "#{content_dir}/#{filename}", 'wb')
