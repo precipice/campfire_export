@@ -342,7 +342,14 @@ module CampfireExport
       rescue
         "[unknown user]"
       else
-        doc.css('name').text
+        # Take the first name and last initial, if there is more than one name.
+        name_parts = doc.css('name').text.split
+        if name_parts.length > 1
+          name_parts[-1] = "#{name_parts.last[0,1]}."
+          name_parts.join(" ")
+        else
+          name_parts[0]
+        end
       end
     end
 
@@ -361,11 +368,11 @@ module CampfireExport
       when 'KickMessage', 'LeaveMessage'
         "[#{user} has left the room]\n"
       when 'TextMessage'
-        "[#{user}:] #{body}\n"
+        "[#{user.rjust(12)}:] #{body}\n"
       when 'UploadMessage'
-        "[#{user} uploaded:] #{body}\n"
+        "[#{user} uploaded: #{body}]\n"
       when 'PasteMessage'
-        "[#{user} pasted:]\n#{indent(body, 2)}\n"
+        "[" + "#{user} pasted:]".rjust(14) + "\n#{indent(body, 16)}\n"
       when 'TopicChangeMessage'
         "[#{user} changed the topic to: #{body}]\n"
       when 'ConferenceCreatedMessage'
