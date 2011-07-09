@@ -162,7 +162,7 @@ module CampfireExport
     MAPPING.freeze
     
     def find_tzinfo(name)
-      TZInfo::TimezoneProxy.new(MAPPING[name] || name)
+      TZInfo::Timezone.get(MAPPING[name] || name)
     end
   end
 end

@@ -17,6 +17,7 @@ Gem::Specification.new do |s|
   s.required_ruby_version = '>= 1.8.7'
   
   s.add_development_dependency "bundler",  "~> 1.0.15"
+  s.add_development_dependency "rspec",    "~> 2.6.0"
   s.add_development_dependency "tzinfo",   "~> 0.3.29"
   s.add_development_dependency "httparty", "~> 0.7.8"
   s.add_development_dependency "nokogiri", "~> 1.4.5"
