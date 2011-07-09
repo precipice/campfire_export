@@ -53,7 +53,7 @@ module CampfireExport
     end
     
     def account_dir
-      "campfire/#{CampfireExport::Account.subdomain}"
+      "campfire/#{Account.subdomain}"
     end
     
     # Requires that room and date be defined in the calling object.
@@ -133,32 +133,30 @@ module CampfireExport
     @subdomain = ""
     @api_token = ""
     @base_url  = ""
-    @timezone  = ""
+    @timezone  = nil
     
     class << self
       attr_accessor :subdomain, :api_token, :base_url, :timezone
     end
     
     def initialize(subdomain, api_token)
-      CampfireExport::Account.subdomain = subdomain
-      CampfireExport::Account.api_token = api_token
-      CampfireExport::Account.base_url  = "https://#{subdomain}.campfirenow.com"
-      
-      # Make the base directory immediately so we can start logging errors.
-      FileUtils.mkdir_p account_dir
-      
-      CampfireExport::Account.timezone  = parse_timezone
+      Account.subdomain = subdomain
+      Account.api_token = api_token
+      Account.base_url  = "https://#{subdomain}.campfirenow.com"
     end
     
-    def parse_timezone
+    def load_timezone
+      # Make the base directory immediately so we can start logging errors.
+      FileUtils.mkdir_p account_dir
+            
       begin
-        settings_html = Nokogiri::HTML get('/account/settings').body
-        selected_zone = settings_html.css('select[id="account_time_zone_id"] ' +
-                                          '> option[selected="selected"]')
-        find_tzinfo(selected_zone.attribute("value").text)
+        settings = Nokogiri::HTML get('/account/settings').body
+        selected_zone = settings.css('select[id="account_time_zone_id"] ' +
+                                     '> option[selected="selected"]')
+        Account.timezone = find_tzinfo(selected_zone.attribute("value").text)
       rescue => e
         log(:error, "couldn't find timezone setting (using GMT instead)", e)
-        find_tzinfo("Etc/GMT")
+        Account.timezone = find_tzinfo("Etc/GMT")
       end
     end
     
