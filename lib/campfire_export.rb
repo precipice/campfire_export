@@ -146,10 +146,7 @@ module CampfireExport
     end
     
     def export(start_date=nil, end_date=nil)
-      # Make the base directory immediately so we can start logging errors.
-      FileUtils.mkdir_p account_dir
-      load_timezone
-      
+      setup_export
       begin
         doc = Nokogiri::XML get('/rooms.xml').body
         doc.css('room').each do |room_xml|
@@ -161,17 +158,24 @@ module CampfireExport
       end
     end
 
-    def load_timezone            
-      begin
-        settings = Nokogiri::HTML get('/account/settings').body
-        selected_zone = settings.css('select[id="account_time_zone_id"] ' +
-                                     '> option[selected="selected"]')
-        Account.timezone = find_tzinfo(selected_zone.attribute("value").text)
-      rescue => e
-        log(:error, "couldn't find timezone setting (using GMT instead)", e)
-        Account.timezone = find_tzinfo("Etc/GMT")
+    private
+      def setup_export
+        # Make the base directory immediately so we can start logging errors.
+        FileUtils.mkdir_p account_dir
+        load_timezone
       end
-    end
+
+      def load_timezone            
+        begin
+          settings = Nokogiri::HTML get('/account/settings').body
+          selected_zone = settings.css('select[id="account_time_zone_id"] ' +
+                                       '> option[selected="selected"]')
+          Account.timezone = find_tzinfo(selected_zone.attribute("value").text)
+        rescue => e
+          log(:error, "couldn't find timezone setting (using GMT instead)", e)
+          Account.timezone = find_tzinfo("Etc/GMT")
+        end
+      end
   end
 
   class Room
