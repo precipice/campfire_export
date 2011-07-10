@@ -51,14 +51,10 @@ module CampfireExport
     def zero_pad(number)
       "%02d" % number
     end
-    
-    def account_dir
-      "campfire/#{Account.subdomain}"
-    end
-    
+
     # Requires that room and date be defined in the calling object.
     def export_dir
-      "#{account_dir}/#{room.name}/" +
+      "campfire/#{Account.subdomain}/#{room.name}/" +
         "#{date.year}/#{zero_pad(date.mon)}/#{zero_pad(date.day)}"
     end
 
@@ -66,6 +62,7 @@ module CampfireExport
     def export_file(content, filename, mode='w')
       # Check to make sure we're writing into the target directory tree.
       true_path = File.expand_path(File.join(export_dir, filename))
+      
       unless true_path.start_with?(File.expand_path(export_dir))
         raise CampfireExport::Exception.new("#{export_dir}/#{filename}",
           "can't export file to a directory higher than target directory; " +
@@ -163,30 +160,21 @@ module CampfireExport
     attr_accessor :id, :name, :created_at, :last_update
     
     def initialize(room_xml)
-      @id          = room_xml.css('id').text
-      @name        = room_xml.css('name').text
-
-      created_utc  = DateTime.parse(room_xml.css('created-at').text)
-      @created_at  = CampfireExport::Account.timezone.utc_to_local(created_utc)
-
-      begin
-        last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
-        update_utc   = DateTime.parse(last_message.css('created-at').text)
-        @last_update = CampfireExport::Account.timezone.utc_to_local(update_utc)
-      rescue => e
-        log(:error, "couldn't get last update in #{room} (defaulting to today)", e)
-        @last_update = Time.now
-      end
+      @id         = room_xml.css('id').text
+      @name       = room_xml.css('name').text
+      created_utc = DateTime.parse(room_xml.css('created-at').text)
+      @created_at = Account.timezone.utc_to_local(created_utc)
     end
-
+    
     def export(start_date=nil, end_date=nil)
       # Figure out how to do the least amount of work while still conforming
       # to the requester's boundary dates.
+      find_last_update
       start_date.nil? ? date = created_at      : date = [start_date, created_at].max
       end_date.nil?   ? end_date = last_update : end_date = [end_date, last_update].min
       
       while date <= end_date
-        transcript = CampfireExport::Transcript.new(self, date)
+        transcript = Transcript.new(self, date)
         transcript.export
 
         # Ensure that we stay well below the 37signals API limits.
@@ -194,6 +182,18 @@ module CampfireExport
         date = date.next
       end
     end
+    
+    private
+      def find_last_update
+        begin
+          last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
+          update_utc   = DateTime.parse(last_message.css('created-at').text)
+          @last_update = Account.timezone.utc_to_local(update_utc)
+        rescue => e
+          log(:error, "couldn't get last update in #{room} (defaulting to today)", e)
+          @last_update = Time.now
+        end
+      end
   end
 
   class Transcript
