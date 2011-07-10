@@ -144,38 +144,18 @@ module CampfireExport
       Account.api_token = api_token
       Account.base_url  = "https://#{subdomain}.campfirenow.com"
     end
-    
-    def export(start_date=nil, end_date=nil)
-      setup_export
-      begin
-        doc = Nokogiri::XML get('/rooms.xml').body
-        doc.css('room').each do |room_xml|
-          room = CampfireExport::Room.new(room_xml)
-          room.export(start_date, end_date)
-        end
-      rescue => e
-        log(:error, "room list download failed", e)
-      end
+
+    def find_timezone
+      settings = Nokogiri::HTML get('/account/settings').body
+      selected_zone = settings.css('select[id="account_time_zone_id"] ' +
+                                   '> option[selected="selected"]')
+      Account.timezone = find_tzinfo(selected_zone.attribute("value").text)
     end
 
-    private
-      def setup_export
-        # Make the base directory immediately so we can start logging errors.
-        FileUtils.mkdir_p account_dir
-        load_timezone
-      end
-
-      def load_timezone            
-        begin
-          settings = Nokogiri::HTML get('/account/settings').body
-          selected_zone = settings.css('select[id="account_time_zone_id"] ' +
-                                       '> option[selected="selected"]')
-          Account.timezone = find_tzinfo(selected_zone.attribute("value").text)
-        rescue => e
-          log(:error, "couldn't find timezone setting (using GMT instead)", e)
-          Account.timezone = find_tzinfo("Etc/GMT")
-        end
-      end
+    def rooms
+      doc = Nokogiri::XML get('/rooms.xml').body
+      doc.css('room').map {|room_xml| Room.new(room_xml) }
+    end
   end
 
   class Room
