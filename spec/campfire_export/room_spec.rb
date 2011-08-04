@@ -21,5 +21,9 @@ module CampfireExport
         room.created_at.should == DateTime.parse("2009-11-17T11:41:38Z")
       end
     end
+    
+    context "when it finds the last update" do
+      it "loads the last update from the most recent message"
+    end
   end
 end
