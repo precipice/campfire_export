@@ -215,7 +215,7 @@ module CampfireExport
       begin
         log(:info, "#{export_dir} ... ")
         @xml = Nokogiri::XML get("#{transcript_path}.xml").body      
-      rescue CampfireExport::Exception => e
+      rescue Exception => e
         log(:error, "transcript export for #{export_dir} failed", e)
       else
         @messages = xml.css('message').map do |message|
