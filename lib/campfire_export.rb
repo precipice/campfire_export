@@ -189,8 +189,10 @@ module CampfireExport
           last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
           update_utc   = DateTime.parse(last_message.css('created-at').text)
           @last_update = Account.timezone.utc_to_local(update_utc)
-        rescue => e
-          log(:error, "couldn't get last update in #{room} (defaulting to today)", e)
+        rescue Exception => e
+          log(:error, 
+              "couldn't get last update in #{room} (defaulting to today)", 
+              e)
           @last_update = Time.now
         end
       end
@@ -225,7 +227,7 @@ module CampfireExport
           log(:info, "exporting transcripts\n")
           begin
             FileUtils.mkdir_p export_dir
-          rescue => e
+          rescue Exception => e
             log(:error, "Unable to create #{export_dir}", e)
           else
             export_xml
@@ -243,7 +245,7 @@ module CampfireExport
       begin
         export_file(xml, 'transcript.xml')
         verify_export('transcript.xml', xml.to_s.length)
-      rescue => e
+      rescue Exception => e
         log(:error, "XML transcript export for #{export_dir} failed", e)
       end
     end
@@ -256,7 +258,7 @@ module CampfireExport
         messages.each {|message| plaintext << message.to_s }
         export_file(plaintext, 'transcript.txt')
         verify_export('transcript.txt', plaintext.length)
-      rescue => e
+      rescue Exception => e
         log(:error, "Plaintext transcript export for #{export_dir} failed", e)
       end
     end
@@ -276,7 +278,7 @@ module CampfireExport
         
         export_file(transcript_html, 'transcript.html')
         verify_export('transcript.html', transcript_html.length)
-      rescue => e
+      rescue Exception => e
         log(:error, "HTML transcript export for #{export_dir} failed", e)
       end
     end
@@ -286,7 +288,7 @@ module CampfireExport
         if message.is_upload?
           begin
             message.upload.export
-          rescue => e
+          rescue Exception => e
             path = "#{message.upload.export_dir}/#{message.upload.filename}"
             log(:error, "Upload export for #{path} failed", e)
           end
@@ -322,7 +324,7 @@ module CampfireExport
       @@usernames          ||= {}
       @@usernames[user_id] ||= begin
         doc = Nokogiri::XML get("/users/#{user_id}.xml").body
-      rescue
+      rescue Exception => e
         "[unknown user]"
       else
         # Take the first name and last initial, if there is more than one name.
