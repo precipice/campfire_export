@@ -143,10 +143,9 @@ module CampfireExport
     end
 
     def find_timezone
-      settings = Nokogiri::HTML get('/account/settings').body
-      selected_zone = settings.css('select[id="account_time_zone_id"] ' +
-                                   '> option[selected="selected"]')
-      Account.timezone = find_tzinfo(selected_zone.attribute("value").text)
+      settings = Nokogiri::XML get('/account.xml').body
+      selected_zone = settings.css('time-zone')
+      Account.timezone = find_tzinfo(selected_zone.text)
     end
 
     def rooms
