@@ -94,6 +94,7 @@ Also, thanks much for all the help, comments and contributions:
 * [Brad Greenlee](https://github.com/bgreenlee)
 * [Andre Arko](https://github.com/indirect)
 * [Brian Donovan](https://github.com/eventualbuddha)
+* [Andrew Wong](https://github.com/andrewwong1221)
 
 As mentioned above, some of the work on this was done by other people. The
 Gist I forked had contributions from:
