@@ -16,7 +16,7 @@ Gem::Specification.new do |s|
   s.rubyforge_project = "campfire_export"
   s.required_ruby_version = '>= 1.8.7'
   
-  s.add_development_dependency "bundler",  "~> 1.0.15"
+  s.add_development_dependency "bundler",  "> 1.0.15"
   s.add_development_dependency "fuubar",   "~> 0.0.5"
   s.add_development_dependency "rspec",    "~> 2.6.0"
   s.add_dependency "tzinfo",   "~> 0.3.29"
