@@ -217,7 +217,7 @@ module CampfireExport
       rescue Exception => e
         log(:error, "transcript export for #{export_dir} failed", e)
       else
-        @messages = xml.css('message').map do |message|
+        @messages = xml.css('messages > message').map do |message|
           CampfireExport::Message.new(message, room, date)
         end
       
