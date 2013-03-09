@@ -95,6 +95,7 @@ Also, thanks much for all the help, comments and contributions:
 * [Andre Arko](https://github.com/indirect)
 * [Brian Donovan](https://github.com/eventualbuddha)
 * [Andrew Wong](https://github.com/andrewwong1221)
+* [Junya Ogura](https://github.com/juno)
 * [Chase Lee](https://github.com/chaselee)
 * [Alex Hofsteede](https://github.com/alex-hofsteede)
 
