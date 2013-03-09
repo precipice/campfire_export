@@ -213,7 +213,7 @@ module CampfireExport
     def export
       begin
         log(:info, "#{export_dir} ... ")
-        @xml = Nokogiri::XML get("#{transcript_path}.xml").body      
+        @xml = Nokogiri::XML get("#{transcript_path}.xml").body
       rescue Exception => e
         log(:error, "transcript export for #{export_dir} failed", e)
       else
@@ -392,7 +392,7 @@ module CampfireExport
   
   class Upload
     include CampfireExport::IO
-    attr_accessor :message, :room, :date, :id, :filename, :content_type, :byte_size
+    attr_accessor :message, :room, :date, :id, :filename, :content_type, :byte_size, :full_url
     
     def initialize(message)
       @message = message
@@ -427,10 +427,11 @@ module CampfireExport
         upload = Nokogiri::XML get(upload_path).body
         
         # Get the upload itself and export it.
-        @id = upload.xpath('id').text
-        @byte_size = upload.xpath('byte-size').text.to_i
-        @content_type = upload.xpath('content-type').text
-        @filename = upload.xpath('name').text
+        @id = upload.xpath('/upload/id').text
+        @byte_size = upload.xpath('/upload/byte-size').text.to_i
+        @content_type = upload.xpath('/upload/content-type').text
+        @filename = upload.xpath('/upload/name').text
+        @full_url = upload.xpath('/upload/full-url').text
 
         export_content(upload_dir)
         export_content(thumb_dir, path_component="thumb/#{id}", verify=false) if is_image?
@@ -458,7 +459,7 @@ module CampfireExport
       # in a day, this will preserve both copies). This path pattern also
       # matches the tail of the upload path in the HTML transcript, making
       # it easier to make downloads functional from the HTML transcripts.
-      content_path = "/room/#{room.id}/#{path_component}/#{CGI.escape(filename)}"        
+      content_path = "/room/#{room.id}/#{path_component}/#{CGI.escape(filename)}"
       content = get(content_path).body
       FileUtils.mkdir_p(File.join(export_dir, content_dir))
       export_file(content, "#{content_dir}/#{filename}", 'wb')
