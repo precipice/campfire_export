@@ -144,13 +144,13 @@ module CampfireExport
 
     def find_timezone
       settings = Nokogiri::XML get('/account.xml').body
-      selected_zone = settings.css('time-zone')
+      selected_zone = settings.xpath('/account/time-zone')
       Account.timezone = find_tzinfo(selected_zone.text)
     end
 
     def rooms
       doc = Nokogiri::XML get('/rooms.xml').body
-      doc.css('room').map {|room_xml| Room.new(room_xml) }
+      doc.xpath('/rooms/room').map {|room_xml| Room.new(room_xml) }
     end
   end
 
@@ -159,9 +159,9 @@ module CampfireExport
     attr_accessor :id, :name, :created_at, :last_update
     
     def initialize(room_xml)
-      @id         = room_xml.css('id').text
-      @name       = room_xml.css('name').text
-      created_utc = DateTime.parse(room_xml.css('created-at').text)
+      @id         = room_xml.xpath('id').text
+      @name       = room_xml.xpath('name').text
+      created_utc = DateTime.parse(room_xml.xpath('created-at').text)
       @created_at = Account.timezone.utc_to_local(created_utc)
     end
     
@@ -186,7 +186,7 @@ module CampfireExport
       def find_last_update
         begin
           last_message = Nokogiri::XML get("/room/#{id}/recent.xml?limit=1").body
-          update_utc   = DateTime.parse(last_message.css('created-at').text)
+          update_utc   = DateTime.parse(last_message.xpath('/messages/message[1]/created-at').text)
           @last_update = Account.timezone.utc_to_local(update_utc)
         rescue Exception => e
           log(:error, 
@@ -217,7 +217,7 @@ module CampfireExport
       rescue Exception => e
         log(:error, "transcript export for #{export_dir} failed", e)
       else
-        @messages = xml.css('messages > message').map do |message|
+        @messages = xml.xpath('/messages/message').map do |message|
           CampfireExport::Message.new(message, room, date)
         end
       
@@ -301,19 +301,19 @@ module CampfireExport
     attr_accessor :id, :room, :body, :type, :user, :date, :timestamp, :upload
 
     def initialize(message, room, date)
-      @id = message.css('id').text
+      @id = message.xpath('id').text
       @room = room
       @date = date
-      @body = message.css('body').text
-      @type = message.css('type').text
+      @body = message.xpath('body').text
+      @type = message.xpath('type').text
 
-      time = Time.parse message.css('created-at').text
+      time = Time.parse message.xpath('created-at').text
       localtime = CampfireExport::Account.timezone.utc_to_local(time)
       @timestamp = localtime.strftime '%I:%M %p'
 
       no_user = ['TimestampMessage', 'SystemMessage', 'AdvertisementMessage']
       unless no_user.include?(@type)
-        @user = username(message.css('user-id').text)
+        @user = username(message.xpath('user-id').text)
       end
       
       @upload = CampfireExport::Upload.new(self) if is_upload?
@@ -327,7 +327,7 @@ module CampfireExport
         "[unknown user]"
       else
         # Take the first name and last initial, if there is more than one name.
-        name_parts = doc.css('name').text.split
+        name_parts = doc.xpath('/user/name').text.split
         if name_parts.length > 1
           name_parts[-1] = "#{name_parts.last[0,1]}."
           name_parts.join(" ")
@@ -427,10 +427,10 @@ module CampfireExport
         upload = Nokogiri::XML get(upload_path).body
         
         # Get the upload itself and export it.
-        @id = upload.css('id').text
-        @byte_size = upload.css('byte-size').text.to_i
-        @content_type = upload.css('content-type').text
-        @filename = upload.css('name').text
+        @id = upload.xpath('id').text
+        @byte_size = upload.xpath('byte-size').text.to_i
+        @content_type = upload.xpath('content-type').text
+        @filename = upload.xpath('name').text
 
         export_content(upload_dir)
         export_content(thumb_dir, path_component="thumb/#{id}", verify=false) if is_image?

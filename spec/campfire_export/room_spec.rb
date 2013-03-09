@@ -8,8 +8,9 @@ module CampfireExport
     include TimeZone
     
     before :each do
-      @room_xml = Nokogiri::XML "<room><name>Test Room</name><id>666</id>" +
+      doc = Nokogiri::XML "<room><name>Test Room</name><id>666</id>" +
         "<created-at>2009-11-17T19:41:38Z</created-at></room>"
+      @room_xml = doc.xpath('/room') 
       Account.timezone = find_tzinfo("America/Los_Angeles")
     end
     
