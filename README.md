@@ -95,6 +95,8 @@ Also, thanks much for all the help, comments and contributions:
 * [Andre Arko](https://github.com/indirect)
 * [Brian Donovan](https://github.com/eventualbuddha)
 * [Andrew Wong](https://github.com/andrewwong1221)
+* [Chase Lee](https://github.com/chaselee)
+* [Alex Hofsteede](https://github.com/alex-hofsteede)
 
 As mentioned above, some of the work on this was done by other people. The
 Gist I forked had contributions from:
@@ -102,8 +104,6 @@ Gist I forked had contributions from:
 * [Pat Allan](https://github.com/freelancing-god)
 * [Bruno Mattarollo](https://github.com/bruno)
 * [bf4](https://github.com/bf4)
-* [Chase Lee](https://github.com/chaselee)
-* [Alex Hofsteede](https://github.com/alex-hofsteede)
 
 Thanks, all!
 
