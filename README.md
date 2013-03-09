@@ -102,6 +102,8 @@ Gist I forked had contributions from:
 * [Pat Allan](https://github.com/freelancing-god)
 * [Bruno Mattarollo](https://github.com/bruno)
 * [bf4](https://github.com/bf4)
+* [Chase Lee](https://github.com/chaselee)
+* [Alex Hofsteede](https://github.com/alex-hofsteede)
 
 Thanks, all!
 
